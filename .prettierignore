@@ -1,0 +1,7 @@
+node_modules/
+dist/
+work/
+public/sample/
+tests/fixtures/
+docs/PRD.md
+*.tsbuildinfo
