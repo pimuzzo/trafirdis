@@ -1,3 +1,4 @@
+import { previewSessionId } from "./session";
 import { PlexClient } from "../plex/client";
 import { discoverTrailers } from "./discovery";
 import type { Discovery, PlaybackAttempt, TrailerReport } from "./types";
@@ -65,7 +66,7 @@ export class TrailerService {
         key &&
         (key.startsWith("/library/metadata/") || key.startsWith("plex://"))
       ) {
-        const session = crypto.randomUUID();
+        const session = previewSessionId();
         const params = new URLSearchParams({
           path: key,
           mediaIndex: "0",
@@ -90,7 +91,7 @@ export class TrailerService {
           session,
         });
         if (canPlay("application/vnd.apple.mpegurl")) {
-          const fallback = crypto.randomUUID();
+          const fallback = previewSessionId();
           params.set("session", fallback);
           params.set("X-Plex-Session-Identifier", fallback);
           attempts.push({

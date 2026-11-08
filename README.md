@@ -25,16 +25,63 @@ npm run preview
 
 Open **http://127.0.0.1:4173**. Vite Preview includes the same Plex proxy. Development and preview servers bind only to loopback by default. Preview is for local testing, not public production hosting.
 
+## Run with Docker
+
+Plexplore remains a frontend SPA. Docker packages a production build with **Nginx serving static files and proxying `/plex/`**. It does not run an application backend, database, Plex server, or custom transcoder. Only Docker Engine/Desktop and Docker Compose v2 are required on the host.
+
+From your project checkout:
+
+```bash
+cp .env.example .env
+# Edit PLEX_SERVER_URL in .env if your Plex address differs.
+docker compose up --build -d
+```
+
+Open **http://localhost:8080** and enter your Plex token in the browser. With the supplied Plex address, `docker compose up --build -d` also works without an environment file. No token belongs in `.env`, Compose, build arguments, or the image.
+
+Compose reads `.env` automatically. If you already configured `.env.local` for Vite, use `docker compose --env-file .env.local up --build -d` instead.
+
+| Docker setting       | Default                                             | Purpose                                                                                                                                                     |
+| -------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PLEX_SERVER_URL`    | `http://192.168.178.46:32400`                       | Plex origin reachable **from the container**. Applied at startup to both the proxy and the browser's server label; changing it does not require rebuilding. |
+| `PLEXPLORE_PORT`     | `8080`                                              | Published port on the Docker host.                                                                                                                          |
+| `PLEXPLORE_BIND_IP`  | `127.0.0.1`                                         | Host interface. Set `0.0.0.0` deliberately for access from other devices on your trusted LAN.                                                               |
+| `VITE_SECTION_ORDER` | `Recently Added,Continue Watching,Unwatched Movies` | Public rail order, passed to the frontend build. Rebuild after changing it.                                                                                 |
+
+Use your Plex server's LAN IP or a hostname resolvable inside Docker. `localhost` inside the container refers to the container itself. If Plex runs on the Docker host, its LAN address is the simplest option; Docker Desktop also provides `host.docker.internal`. Linux host-gateway mappings or shared Docker networks can be supplied with a local Compose override if needed.
+
+After editing runtime settings, run `docker compose up -d` to recreate the container. For LAN access, open `http://<docker-host-ip>:8080`; use HTTPS through your existing TLS reverse proxy if you require encrypted browser traffic. Preview sessions also work on HTTP LAN origins where `crypto.randomUUID` is unavailable; clipboard access may still require HTTPS or localhost.
+
+```bash
+docker compose ps          # Container and health status
+docker compose logs        # Startup messages; request/error logging is disabled
+docker compose down        # Stop Plexplore; the Plex server is separate
+```
+
+The image runs as the unprivileged `nginx` user on container port 8080. Compose drops capabilities, uses a read-only root filesystem and temporary `/tmp`, and publishes only on loopback by default. The health check verifies the static server, so an offline Plex server does not take down the SPA. Metadata and media pass through one fixed configured origin; streams are unbuffered, range requests are preserved, local redirects stay under `/plex`, and external redirects are rejected.
+
+Native media query tokens are forwarded only to Plex. Nginx access/error logging is disabled because its error messages can include original token-bearing URLs. This differs from the Vite development middleware, which converts query tokens to headers. URLs can still appear in browser developer tools or an additional reverse proxy's logs; configure that proxy's redaction separately.
+
+For a manual image build:
+
+```bash
+docker build -t plexplore:local .
+docker run --rm -p 127.0.0.1:8080:8080 \
+  -e PLEX_SERVER_URL=http://192.168.178.46:32400 plexplore:local
+```
+
+Docker deployments use the production UI, so development-only trailer diagnostics are absent. The original PRD did not require Docker; packaging was added in response to the subsequent request. The real-server acceptance checks below still apply.
+
 ## Configuration
 
 | Setting              | Location                 | Purpose                                                                                                                                 |
 | -------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `PLEX_SERVER_URL`    | `.env.local`             | Plex HTTP(S) origin, including port. No credentials, path, or query. Used only by Vite's server-side proxy.                             |
+| `PLEX_SERVER_URL`    | `.env.local`             | Plex HTTP(S) origin, including port. No credentials, path, or query. Used by the Vite proxy or Docker runtime.                          |
 | `VITE_SECTION_ORDER` | `.env.local`             | Comma-separated rail titles, followed by remaining genres alphabetically. Default: `Recently Added,Continue Watching,Unwatched Movies`. |
 | Plex token           | Connection screen        | Stored in `sessionStorage`, with an in-memory fallback if storage is unavailable. Cleared on disconnect.                                |
 | Movie library        | Catalog library selector | Appears when the account has more than one movie library.                                                                               |
 
-Never create a `VITE_PLEX_TOKEN` setting: Vite embeds `VITE_` variables in public JavaScript. `.env.local` is ignored by Git. Only the server origin is embedded for display; authentication is entered at runtime.
+Never create a `VITE_PLEX_TOKEN` setting: Vite embeds `VITE_` variables in public JavaScript. `.env.local` is ignored by Git. The development build embeds only the server origin for display; Docker supplies a public runtime override. Authentication is entered in the browser in both cases.
 
 ## Browsing
 
@@ -95,7 +142,7 @@ API requests send authentication in headers. Native image/video elements require
 
 Only relative, trusted Plex resource paths are accepted. External redirects are blocked, HLS requests are checked before attaching credentials, a media/connect content-security policy restricts browser requests to this origin, and pages use a no-referrer policy. Plex Web links contain no token and use `noopener noreferrer`. All artwork and sample assets are local or served through the Plex proxy. There is no telemetry or analytics SDK.
 
-For a later self-hosted deployment, serve `dist/` and forward `/plex/` to a **fixed, trusted Plex origin** using a lightweight reverse proxy. Preserve the prefix in browser-facing streaming URLs; rewrite same-server Location headers, allow range/stream responses, strip query tokens before logging, and block external redirects. Do not expose an arbitrary-target proxy or publish the development server. No application backend is needed; a production proxy configuration is intentionally not supplied without a deployment target and authentication model.
+The Docker image supplies a local/LAN production reverse proxy with those protections. If placing another proxy in front, preserve the `/plex` prefix and streaming behavior, configure TLS and authentication for your deployment, and prevent token-bearing request URLs from entering access/error logs. Do not publicly expose the Vite development server or an arbitrary-target proxy.
 
 ## Development and tests
 
@@ -104,6 +151,7 @@ npm run check          # Unit/integration tests, TypeScript, production build
 npm run test:watch
 npx playwright install chromium
 npm run test:e2e       # Real Chromium interaction, video and proxy tests
+npm run test:docker    # Test a built image with the real Nginx proxy and browser playback
 npm run format:check
 ```
 
@@ -128,3 +176,5 @@ public/sample/    Original local sample illustrations
 ```
 
 All UI, source comments, errors, configuration, and documentation are in English. The original supplied specification is retained at `docs/PRD.md`; the product brand is **Plexplore**.
+
+The Docker test suite requires a built `plexplore:local` image, the `node:22-alpine` fixture image, and the same Playwright Chromium installation used by the browser suite. It creates and removes an isolated Docker network and test containers, uses only synthetic Plex responses/media, and checks runtime configuration, non-root/read-only operation, authentication, redirects, range/stream delivery, browser playback, offline Plex behavior, and credential-free logs. Set `PLEXPLORE_TEST_IMAGE` to test another image tag. Builds behind a TLS inspection proxy may use the optional BuildKit secret `--secret id=proxy_ca,src=/path/to/trusted-proxy-ca.pem`; that CA is mounted only during dependency installation and is not copied into the image.

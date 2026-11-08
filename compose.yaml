@@ -1,0 +1,19 @@
+services:
+  plexplore:
+    build:
+      context: .
+      args:
+        VITE_SECTION_ORDER: ${VITE_SECTION_ORDER:-Recently Added,Continue Watching,Unwatched Movies}
+    image: plexplore:local
+    ports:
+      - "${PLEXPLORE_BIND_IP:-127.0.0.1}:${PLEXPLORE_PORT:-8080}:8080"
+    environment:
+      PLEX_SERVER_URL: ${PLEX_SERVER_URL:-http://192.168.178.46:32400}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

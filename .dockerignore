@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+dist
+work
+tests
+test-results
+playwright-report
+.env
+.env.*
+*.local
+*.tsbuildinfo
+README.md
+docs

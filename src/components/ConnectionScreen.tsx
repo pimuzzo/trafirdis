@@ -1,3 +1,4 @@
+import { serverLabel } from "../config";
 import { useState } from "react";
 import { Brand, Icon } from "./Icon";
 export function ConnectionScreen({
@@ -69,7 +70,7 @@ export function ConnectionScreen({
             />
             <div className="server-label">
               <span className="status-dot" />
-              {__PLEX_SERVER_LABEL__}
+              {serverLabel}
             </div>
             <button className="button primary" type="submit">
               Connect my library

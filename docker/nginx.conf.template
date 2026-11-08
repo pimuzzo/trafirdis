@@ -1,0 +1,87 @@
+worker_processes auto;
+pid /tmp/plexplore-nginx.pid;
+# Nginx error messages can include original request URLs, including media tokens.
+# Deliberately disable request/error logging; startup validation still uses stderr.
+error_log /dev/null;
+events { worker_connections 1024; }
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log off;
+    server_tokens off;
+    sendfile on;
+    client_body_temp_path /tmp/client_temp;
+    proxy_temp_path /tmp/proxy_temp;
+    fastcgi_temp_path /tmp/fastcgi_temp;
+    uwsgi_temp_path /tmp/uwsgi_temp;
+    scgi_temp_path /tmp/scgi_temp;
+
+    # Match an absolute redirect's origin separately, without interpolated regexes.
+    map $upstream_http_location $plex_redirect_origin {
+        default "";
+        "~^(?<redirect_origin>https?://[^/]+)(/.*)?$" $redirect_origin;
+    }
+    map $plex_redirect_origin $plex_same_origin {
+        default 0;
+        "${PLEX_SERVER_URL}" 1;
+    }
+    map "$plex_same_origin:$upstream_http_location" $plex_safe_redirect {
+        default "";
+        "~^1:https?://[^/]+(?<absolute_path>/[^\\\\]*)?$" "/plex$absolute_path";
+        "~^0:(?<local_path>/(?!/)[^\\\\]*)$" "/plex$local_path";
+        "~^0:(?![A-Za-z][A-Za-z0-9+.-]*:|[/\\\\])(?<relative_path>[^\\\\]+)$" $relative_path;
+    }
+    server {
+        listen 8080;
+        root /usr/share/nginx/html;
+        absolute_redirect off;
+        add_header Referrer-Policy no-referrer always;
+        add_header X-Content-Type-Options nosniff always;
+
+        location = /healthz {
+            default_type text/plain;
+            return 200 "healthy\n";
+        }
+        location = /runtime-config.js {
+            alias /tmp/plexplore-runtime.js;
+            default_type application/javascript;
+            add_header Cache-Control "no-store";
+        }
+        location = /plex { return 308 /plex/; }
+        location ^~ /plex/ {
+            if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+            proxy_pass ${PLEX_SERVER_URL}/;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_set_header Host $proxy_host;
+            proxy_ssl_server_name on;
+            proxy_ssl_verify on;
+            proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_cache off;
+            proxy_ignore_client_abort off;
+            proxy_redirect off;
+            proxy_ignore_headers X-Accel-Redirect X-Accel-Buffering;
+            proxy_hide_header Refresh;
+            proxy_hide_header Set-Cookie;
+            proxy_intercept_errors on;
+            error_page 301 302 303 307 308 = @plex_redirect;
+        }
+        location @plex_redirect {
+            if ($plex_safe_redirect = "") { return 502; }
+            return 302 $plex_safe_redirect;
+        }
+        location ~ /\. { return 404; }
+        location /assets/ {
+            try_files $uri =404;
+            add_header Cache-Control "public, max-age=31536000, immutable";
+        }
+        location / {
+            try_files $uri $uri/ /index.html;
+            add_header Cache-Control "no-cache";
+        }
+    }
+}

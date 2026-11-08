@@ -1,3 +1,4 @@
+import { serverLabel } from "../config";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PlexClient, errorMessage } from "../plex/client";
@@ -461,12 +462,12 @@ export default function Catalog({
             <p>
               {sample
                 ? "You are browsing fictional films in the sample library."
-                : `Connected through ${__PLEX_SERVER_LABEL__}`}
+                : `Connected through ${serverLabel}`}
             </p>
             <p className="subtle">
-              The Plex server address is configured in .env.local. Tokens are
-              kept only for this browser session. Your library and watch history
-              are never changed.
+              The Plex server address is configured by the deployment. Tokens
+              are kept only for this browser session. Your library and watch
+              history are never changed.
             </p>
             {Diagnostics && (
               <button
