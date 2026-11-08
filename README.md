@@ -179,6 +179,18 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium npm run test:e2e
 
 The browser suite starts loopback-only Vite on the dedicated port 5175 with a local proxy fixture on 32401. The suite refuses to reuse an existing server on that port, so it always tests the configured fixture target. It requires no Plex token or real server. Generated WebM and HLS clips in `tests/fixtures` contain only a solid color and sine wave. They exercise actual media decoding without copyrighted trailers or external network dependencies. Tests cover grouping/filtering, pagination/errors, URL trust, trailer preference and caching, selection cancellation, timeout/cleanup, real native and HLS playback, keyboard/modal interactions, privacy, proxy behavior, and narrow layouts.
 
+### GitHub Actions
+
+[CI](.github/workflows/ci.yml) runs on every pull request, pushes to `main`, and manual dispatch. It uses Node.js 22 on Ubuntu 24.04 with three independent checks:
+
+- **Quality checks**: locked dependency installation, formatting (including workflow files), unit/integration tests, TypeScript, and a production build.
+- **Browser tests**: the complete Playwright suite against the local synthetic Plex fixture. CI installs Google Chrome so native and HLS tests exercise its media codec support. The HTML report and failure screenshots/traces are uploaded as `browser-test-results` for seven days.
+- **Docker integration**: builds the production image and runs the container/proxy/browser suite against a synthetic Plex server, including actual media decoding and hosted sign-in simulation.
+
+The workflow needs no Plex credentials, private-network access, repository secrets, or image-registry publishing permissions. Actions are pinned to commit SHAs and repository permissions are read-only. New commits cancel older runs for the same branch or pull request. CI rejects focused `test.only` cases and allows 60 seconds per browser test (30 seconds locally); it does not automatically retry failed tests. Local runs also retain traces for failures.
+
+For branch protection on `main`, require the **Quality checks**, **Browser tests**, and **Docker integration** status checks before merging. Failed runs expose their logs in the PR's Checks tab; browser artifacts can be downloaded from the corresponding Actions run. The workflow does not publish an image or deploy the app. Real Plex account/server acceptance still happens on your desktop.
+
 ## Source layout
 
 ```text

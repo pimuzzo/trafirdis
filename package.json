@@ -11,8 +11,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check": "npm run test && npm run build",
-    "format": "prettier --write src tests vite.config.ts playwright.config.ts package.json tsconfig.json index.html README.md docs/plex-api.md docs/implementation.md scripts tests/docker public/runtime-config.js compose.yaml",
-    "format:check": "prettier --check src tests vite.config.ts playwright.config.ts package.json tsconfig.json index.html README.md docs/plex-api.md docs/implementation.md scripts tests/docker public/runtime-config.js compose.yaml",
+    "format": "prettier --write src tests vite.config.ts playwright.config.ts package.json tsconfig.json index.html README.md docs/plex-api.md docs/implementation.md scripts tests/docker public/runtime-config.js compose.yaml .github",
+    "format:check": "prettier --check src tests vite.config.ts playwright.config.ts package.json tsconfig.json index.html README.md docs/plex-api.md docs/implementation.md scripts tests/docker public/runtime-config.js compose.yaml .github",
     "test:docker": "node scripts/test-docker.mjs"
   },
   "dependencies": {
