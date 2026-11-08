@@ -62,6 +62,8 @@ The image runs as the unprivileged `nginx` user on container port 8080. Compose 
 
 Native media query tokens are forwarded only to Plex. Nginx access/error logging is disabled because its error messages can include original token-bearing URLs. This differs from the Vite development middleware, which converts query tokens to headers. URLs can still appear in browser developer tools or an additional reverse proxy's logs; configure that proxy's redaction separately.
 
+When Plex redirects native artwork or video to another resource on the configured server, both proxies preserve the media URL's authentication on the trusted `/plex` redirect. Vite strips the query token back into a header on every hop. Header-only authentication is not added to redirect URLs, and external redirects remain blocked.
+
 For a manual image build:
 
 ```bash

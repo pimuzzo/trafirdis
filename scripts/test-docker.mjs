@@ -132,15 +132,31 @@ try {
     assert.equal(target.pathname, "/plex/echo");
     assert.equal((await fetch(target)).status, 200);
   }
+  for (const kind of ["local", "absolute", "relative", "bare", "chain"]) {
+    const redirect = await fetch(
+      `${base}/plex/redirect-${kind}?${new URLSearchParams({ "X-Plex-Token": token })}`,
+    );
+    assert.equal(redirect.status, 200, kind);
+    const echoed = await redirect.json();
+    assert.equal(echoed.token, token, kind);
+    assert.equal(
+      new URLSearchParams(echoed.query).getAll("X-Plex-Token").length,
+      1,
+      kind,
+    );
+  }
   for (const kind of ["external", "protocol-relative", "backslash"]) {
-    const redirect = await fetch(`${base}/plex/redirect-${kind}`, {
-      redirect: "manual",
-    });
+    const redirect = await fetch(
+      `${base}/plex/redirect-${kind}?${new URLSearchParams({ "X-Plex-Token": token })}`,
+      {
+        redirect: "manual",
+      },
+    );
     assert.equal(redirect.status, 502);
     assert.equal(redirect.headers.get("location"), null);
   }
   response = await fetch(`${base}/plex/library/parts/101/trailer.webm`, {
-    headers: { Range: "bytes=0-15" },
+    headers: { Range: "bytes=0-15", "X-Plex-Token": token },
   });
   assert.equal(response.status, 206);
   assert.equal((await response.arrayBuffer()).byteLength, 16);
@@ -188,6 +204,14 @@ try {
     { timeout: 15000 },
   );
   assert.equal(await page.locator("video").count(), 1);
+  assert.match(
+    await page.locator("video").evaluate((video) => video.src),
+    /\/library\/parts\/101\/redirect\.webm/,
+  );
+  await page.waitForFunction(() => {
+    const image = document.querySelector(".hero-background img");
+    return image?.complete && image.naturalWidth > 0;
+  });
   assert.equal(
     await page.locator("video").evaluate((video) => video.muted),
     true,

@@ -31,12 +31,24 @@ const server = createServer((req, res) => {
     "/redirect-local": "/echo?from=local",
     "/redirect-absolute": "http://plex-fixture:32400/echo?from=absolute",
     "/redirect-relative": "echo?from=relative",
+    "/redirect-bare": "/echo",
+    "/redirect-chain": "/redirect-relative",
     "/redirect-external": "https://outside.example/asset",
     "/redirect-protocol-relative": "//outside.example/asset",
     "/redirect-backslash": "/\\outside.example/asset",
   };
   if (redirects[url.pathname]) {
     res.writeHead(302, { Location: redirects[url.pathname] });
+    res.end();
+    return;
+  }
+  if (url.pathname === "/photo/:/transcode") {
+    res.writeHead(302, { Location: "/protected-image" });
+    res.end();
+    return;
+  }
+  if (url.pathname === "/library/parts/101/redirect.webm") {
+    res.writeHead(302, { Location: "trailer.webm" });
     res.end();
     return;
   }
@@ -49,7 +61,12 @@ const server = createServer((req, res) => {
     });
     return;
   }
-  if (url.pathname.startsWith("/photo/")) {
+  if (url.pathname === "/protected-image") {
+    if (!token) {
+      res.writeHead(401);
+      res.end();
+      return;
+    }
     res.setHeader("Content-Type", "image/svg+xml");
     res.end(
       '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><path fill="#293c52" d="M0 0h320v180H0z"/></svg>',
@@ -57,6 +74,11 @@ const server = createServer((req, res) => {
     return;
   }
   if (url.pathname.startsWith("/library/parts/")) {
+    if (!token) {
+      res.writeHead(401);
+      res.end();
+      return;
+    }
     const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || "");
     const start = range ? Number(range[1]) : 0,
       end =
@@ -139,7 +161,7 @@ const server = createServer((req, res) => {
                       : [
                           {
                             container: "webm",
-                            Part: [{ key: "/library/parts/101/trailer.webm" }],
+                            Part: [{ key: "/library/parts/101/redirect.webm" }],
                           },
                         ],
                 },

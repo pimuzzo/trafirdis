@@ -274,6 +274,52 @@ test("plays a native trailer after the delay, muted and inline, and stops on hid
     requests.some((r) => /timeline|scrobble|playQueues/.test(r.path)),
   ).toBe(false);
 });
+test("mute controls match the video after pause, settings and tab visibility restarts", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  await mockPlex(page, { trailer: "direct" });
+  await connect(page);
+  const preview = page.locator("[data-preview-phase]");
+  const video = page.locator("video");
+  const unmute = async () => {
+    await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+    await expect(
+      page.getByRole("button", { name: "Unmute preview" }),
+    ).toBeEnabled();
+    expect(await video.evaluate((element) => element.muted)).toBe(true);
+    await page.getByRole("button", { name: "Unmute preview" }).click();
+    await expect(
+      page.getByRole("button", { name: "Mute preview", exact: true }),
+    ).toBeEnabled();
+    expect(await video.evaluate((element) => element.muted)).toBe(false);
+  };
+  await unmute();
+  await page.getByRole("button", { name: "Pause preview" }).click();
+  await expect(preview).toHaveAttribute("data-preview-phase", "paused");
+  await page.getByRole("button", { name: "Play preview" }).click();
+  await unmute();
+  await page.getByRole("button", { name: "Connection settings" }).click();
+  await expect(preview).toHaveAttribute("data-preview-phase", "paused");
+  await page.keyboard.press("Escape");
+  await unmute();
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(preview).toHaveAttribute("data-preview-phase", "paused");
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await unmute();
+});
 test("rapid selection cancels pending previews and only loads the final selected film", async ({
   page,
 }) => {

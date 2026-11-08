@@ -42,6 +42,10 @@ The diagnostic record distinguishes:
 
 No HEAD request is used as proof of playability. No video prefetch is performed for unselected films. Diagnostics inspect a small sequential sample without loading streams. Abort signals and generation checks prevent obsolete responses from replacing the current preview. Source release and player destruction prevent concurrent active video. Automatic retry is bounded by the candidate list.
 
+Native image and video elements cannot resend a proxy-injected authentication header when following a redirect. Both Vite and Docker preserve the original media query token on validated same-server redirects; Vite removes it before each upstream request. Relative locations resolve against the current resource. Header-only credentials remain in headers, and external redirects are rejected before returning any authenticated location. Regression tests include redirect chains and actual Chromium image/video decoding.
+
+Every preview restart resets the element and its audio control to muted, including pause/resume, settings and tab-visibility changes. The control also reads the element's actual muted state when toggled. Browser regression tests exercise all three restart paths.
+
 ## Evidence and outstanding validation
 
 Unit tests use explicit synthetic Plex-shaped JSON, including both local parts and indirect extra keys. Browser tests use synthetic WebM/HLS media and actually decode them in Chromium. Proxy tests use a loopback HTTP fixture. These establish application behavior, not the behavior of the user's server or licensed extras provider.

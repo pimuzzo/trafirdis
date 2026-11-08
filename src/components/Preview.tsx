@@ -44,6 +44,7 @@ export function Preview({
     movieId,
     enabled && visible && pageVisible && !paused,
     retry,
+    setMuted,
   );
   const playing = report.phase === "playing";
   const busy = [
@@ -80,6 +81,7 @@ export function Preview({
         ref={video}
         className={playing ? "preview-video is-playing" : "preview-video"}
         muted
+        onVolumeChange={(event) => setMuted(event.currentTarget.muted)}
         playsInline
         preload="none"
         aria-label="Movie trailer preview"
@@ -118,8 +120,8 @@ export function Preview({
               aria-label={muted ? "Unmute preview" : "Mute preview"}
               onClick={() => {
                 if (video.current) {
-                  video.current.muted = !muted;
-                  setMuted(!muted);
+                  video.current.muted = !video.current.muted;
+                  setMuted(video.current.muted);
                 }
               }}
             >

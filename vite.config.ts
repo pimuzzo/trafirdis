@@ -2,6 +2,8 @@ import { defineConfig, loadEnv, type Plugin, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+const nativeMediaTokens = new WeakMap<IncomingMessage, string>();
+
 // Native media elements require URL authentication. Convert it to a header before
 // Vite's proxy sees the URL, so proxy errors cannot print a token-bearing URL.
 function privateMediaAuth(): Plugin {
@@ -13,7 +15,10 @@ function privateMediaAuth(): Plugin {
     if (req.url?.startsWith("/plex/")) {
       const url = new URL(req.url, "http://localhost");
       const token = url.searchParams.get("X-Plex-Token");
-      if (token) req.headers["x-plex-token"] = token;
+      if (token) {
+        req.headers["x-plex-token"] = token;
+        nativeMediaTokens.set(req, token);
+      }
       url.searchParams.delete("X-Plex-Token");
       req.url = `${url.pathname}${url.search}`;
     }
@@ -53,14 +58,27 @@ export default defineConfig(({ mode }) => {
       configure: (instance) => {
         // Keep redirects inside the configured Plex origin; do not forward tokens
         // to a third-party CDN. Plex's own streaming route resolves provider media.
-        instance.on("proxyRes", (response) => {
+        instance.on("proxyRes", (response, req) => {
           const location = response.headers.location;
           if (!location) return;
           try {
-            const next = new URL(location, server.origin);
-            if (next.origin === server.origin)
+            const next = new URL(
+              location,
+              new URL(req.url || "/", server.origin),
+            );
+            if (
+              next.origin === server.origin &&
+              !next.username &&
+              !next.password &&
+              !/[\\\\\r\n]/.test(location)
+            ) {
+              // A native element cannot replay the server-side auth header.
+              // Restore its URL token only after validating the redirect origin;
+              // the next request strips it again before entering the proxy.
+              const token = nativeMediaTokens.get(req);
+              if (token) next.searchParams.set("X-Plex-Token", token);
               response.headers.location = `/plex${next.pathname}${next.search}`;
-            else {
+            } else {
               response.statusCode = 502;
               delete response.headers.location;
             }

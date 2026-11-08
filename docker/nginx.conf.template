@@ -31,6 +31,21 @@ http {
         "~^0:(?<local_path>/(?!/)[^\\\\]*)$" "/plex$local_path";
         "~^0:(?![A-Za-z][A-Za-z0-9+.-]*:|[/\\\\])(?<relative_path>[^\\\\]+)$" $relative_path;
     }
+    # Native media cannot resend an auth header on a browser-followed redirect.
+    # Preserve the original encoded query token only on a validated local target.
+    map $args $plex_media_query {
+        default "";
+        "~*(?:^|&)(?<media_query>X-Plex-Token=[^&]+)" $media_query;
+    }
+    map $plex_safe_redirect $plex_redirect_separator {
+        default "?";
+        "~\\?" "&";
+    }
+    map "$plex_media_query:$plex_safe_redirect" $plex_authenticated_redirect {
+        default "$plex_safe_redirect$plex_redirect_separator$plex_media_query";
+        "~^:" $plex_safe_redirect;
+        "~*^[^:]+:.*[?&]X-Plex-Token=" $plex_safe_redirect;
+    }
     server {
         listen 8080;
         root /usr/share/nginx/html;
@@ -72,7 +87,7 @@ http {
         }
         location @plex_redirect {
             if ($plex_safe_redirect = "") { return 502; }
-            return 302 $plex_safe_redirect;
+            return 302 $plex_authenticated_redirect;
         }
         location ~ /\. { return 404; }
         location /assets/ {

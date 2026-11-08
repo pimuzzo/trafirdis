@@ -118,6 +118,23 @@ describe("automatic preview lifecycle", () => {
     await act(() => vi.advanceTimersByTimeAsync(1500));
     expect(playAttempt).toHaveBeenCalledTimes(1);
   });
+  it("synchronizes the mute control whenever the same movie restarts", async () => {
+    const { service, ref } = setup();
+    const onMuteChange = vi.fn();
+    const { rerender } = renderHook(
+      ({ enabled }) => usePreview(ref, service, "A", enabled, 0, onMuteChange),
+      { initialProps: { enabled: true } },
+    );
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    ref.current!.muted = false;
+    onMuteChange.mockClear();
+    rerender({ enabled: false });
+    expect(ref.current!.muted).toBe(true);
+    expect(onMuteChange).toHaveBeenLastCalledWith(true);
+    onMuteChange.mockClear();
+    rerender({ enabled: true });
+    expect(onMuteChange).toHaveBeenLastCalledWith(true);
+  });
   it("tries Plex streaming after a direct playback failure and records actual playing events", async () => {
     const { service, ref } = setup();
     vi.spyOn(service, "attempts").mockReturnValue([
