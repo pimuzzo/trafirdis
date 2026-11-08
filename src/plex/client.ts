@@ -1,3 +1,4 @@
+import { getClientIdentifier } from "./device";
 import type { Library, Movie, Server } from "../domain/movie";
 import type { PlexContainer, PlexMetadata } from "./schema";
 
@@ -44,13 +45,14 @@ export class PlexClient {
   constructor(
     private token: string,
     private fetcher: typeof fetch = (...args) => fetch(...args),
+    readonly clientIdentifier = getClientIdentifier(),
   ) {}
   private headers(): Record<string, string> {
     return {
       Accept: "application/json",
-      "X-Plex-Token": this.token,
+      ...(this.token ? { "X-Plex-Token": this.token } : {}),
       "X-Plex-Product": "Plexplore",
-      "X-Plex-Client-Identifier": "plexplore-browser",
+      "X-Plex-Client-Identifier": this.clientIdentifier,
     };
   }
   safePath(path: string): string {

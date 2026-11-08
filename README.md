@@ -12,7 +12,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open **http://127.0.0.1:5173**. The default proxy target is `http://192.168.178.46:32400`; change `PLEX_SERVER_URL` in `.env.local` if needed, then restart Vite. Enter your Plex token in the connection screen. [Plex explains how to find your token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/). Do not paste tokens into issues, source files, screenshots, or chat.
+Open **http://127.0.0.1:5173**. The default proxy target is `http://192.168.178.46:32400`; change `PLEX_SERVER_URL` in `.env.local` if needed, then restart Vite. Choose **Sign in with Plex**, authorize Plexplore on Plex’s official website, and return to your library. Plexplore never asks for your Plex password. An advanced manual-token option remains available; do not paste tokens into issues, source files, screenshots, or chat.
 
 You can also choose **Explore the sample library**. It contains twelve explicitly fictional movies and locally bundled original illustrations. It makes no Plex or third-party requests and does not simulate successful trailers.
 
@@ -37,7 +37,7 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-Open **http://localhost:8080** and enter your Plex token in the browser. With the supplied Plex address, `docker compose up --build -d` also works without an environment file. No token belongs in `.env`, Compose, build arguments, or the image.
+Open **http://localhost:8080** and choose **Sign in with Plex**. With the supplied Plex address, `docker compose up --build -d` also works without an environment file. No token belongs in `.env`, Compose, build arguments, or the image.
 
 Compose reads `.env` automatically. If you already configured `.env.local` for Vite, use `docker compose --env-file .env.local up --build -d` instead.
 
@@ -74,14 +74,28 @@ Docker deployments use the production UI, so development-only trailer diagnostic
 
 ## Configuration
 
-| Setting              | Location                 | Purpose                                                                                                                                 |
-| -------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `PLEX_SERVER_URL`    | `.env.local`             | Plex HTTP(S) origin, including port. No credentials, path, or query. Used by the Vite proxy or Docker runtime.                          |
-| `VITE_SECTION_ORDER` | `.env.local`             | Comma-separated rail titles, followed by remaining genres alphabetically. Default: `Recently Added,Continue Watching,Unwatched Movies`. |
-| Plex token           | Connection screen        | Stored in `sessionStorage`, with an in-memory fallback if storage is unavailable. Cleared on disconnect.                                |
-| Movie library        | Catalog library selector | Appears when the account has more than one movie library.                                                                               |
+| Setting              | Location                              | Purpose                                                                                                                                  |
+| -------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `PLEX_SERVER_URL`    | `.env.local`                          | Plex HTTP(S) origin, including port. No credentials, path, or query. Used by the Vite proxy or Docker runtime.                           |
+| `VITE_SECTION_ORDER` | `.env.local`                          | Comma-separated rail titles, followed by remaining genres alphabetically. Default: `Recently Added,Continue Watching,Unwatched Movies`.  |
+| Plex token           | Plex sign-in or advanced manual entry | A verified server-specific token is stored in `sessionStorage`. Cleared on disconnect. Manual entry also supports an in-memory fallback. |
+| Movie library        | Catalog library selector              | Appears when the account has more than one movie library.                                                                                |
 
 Never create a `VITE_PLEX_TOKEN` setting: Vite embeds `VITE_` variables in public JavaScript. `.env.local` is ignored by Git. The development build embeds only the server origin for display; Docker supplies a public runtime override. Authentication is entered in the browser in both cases.
+
+## Sign in with Plex
+
+Choose **Sign in with Plex** on the connection screen. Plexplore creates a strong PIN using Plex’s documented authorization flow, then redirects this tab to `https://app.plex.tv/auth`. Sign in there, including any two-factor authentication Plex requires, and authorize **Plexplore**. Plex returns the browser to this same application origin. No password, PIN entry, client secret, public callback service, or custom backend is required by Plexplore.
+
+The pending flow is kept in this tab’s session storage with a random return-state value. The return must match the stored state and client identifier, and authorization is bounded by Plex’s reported expiry and a maximum local lifetime of ten minutes. Cancel sign-in aborts requests and polling. Invalid, expired, rejected, interrupted, or throttled sign-in stays on the connection screen with a recoverable error.
+
+After authorization, Plexplore reads the fixed configured server’s unauthenticated `/identity` endpoint and matches its `machineIdentifier` to the authenticated Plex cloud resource list. It obtains that server’s `accessToken`, verifies it against the configured server, and stores **only the server token** in the browser session. The broader Plex account token is used transiently only with Plex’s resource API and is not saved or sent to the media server. Connection URLs returned by the resource list are ignored: signing in does not change your configured proxy target.
+
+Sign-in makes browser requests directly to `https://plex.tv` and `https://clients.plex.tv`; the container still serves only static files and proxies the configured media server. Internet access and browser session storage are required for hosted sign-in. The page’s connection policy allows these two Plex origins specifically. Other Plex servers listed in your account are not contacted. The non-secret client identifier is reused from local storage, with session/in-memory fallbacks, so Plex can identify this app instance in Authorized Devices.
+
+**Use a Plex token instead** expands the advanced manual option. To obtain one manually, sign in to Plex Web, open a library item, choose **Get Info → View XML**, and copy the `X-Plex-Token` value from the opened URL. [Plex’s official token instructions](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) explain the procedure. A manually entered token can be used without a cloud sign-in request. Sample browsing still makes no Plex/cloud requests.
+
+Disconnect clears local access and catalog caches; it does not revoke Plex’s Authorized Devices entry. You can revoke the app through Plex’s account settings. Plex Home managed-user switching and automatic server selection remain outside this MVP. Live account authorization and the user’s actual PMS still require validation; automated sign-in tests simulate Plex responses and redirects.
 
 ## Browsing
 
@@ -138,9 +152,9 @@ Plex Pass does not guarantee every title has a trailer or that every browser can
 
 This is a personal local-network prototype. `sessionStorage` tokens can be read by scripts executing on the application's origin and by browser extensions with sufficient access. They survive reloads within the tab. Disconnect clears the token and query caches; closing the tab normally ends the session. Do not use a shared or untrusted browser profile.
 
-API requests send authentication in headers. Native image/video elements require a token in their same-origin proxy URL, so credentials can be visible in browser developer tools. The local Vite middleware removes that query parameter and forwards it as a header before proxying, keeping token-bearing URLs out of Vite proxy error logs. Do not publish browser network captures or put access logs ahead of this middleware without redaction. HTTP on your LAN does not encrypt traffic; use Plex HTTPS if you require encrypted LAN transport.
+API requests send authentication in headers. Native image/video elements require a token in their same-origin proxy URL, so credentials can be visible in browser developer tools. The local Vite middleware removes that query parameter and forwards it as a header before proxying, keeping token-bearing URLs out of Vite proxy error logs. Do not publish browser network captures or put access logs ahead of this middleware without redaction. HTTP on your LAN does not encrypt traffic; use Plex HTTPS and an HTTPS app origin if you require encrypted transport. Hosted sign-in always uses Plex HTTPS endpoints, and the authorization callback URL contains a random state value rather than a token.
 
-Only relative, trusted Plex resource paths are accepted. External redirects are blocked, HLS requests are checked before attaching credentials, a media/connect content-security policy restricts browser requests to this origin, and pages use a no-referrer policy. Plex Web links contain no token and use `noopener noreferrer`. All artwork and sample assets are local or served through the Plex proxy. There is no telemetry or analytics SDK.
+Only relative, trusted Plex media resource paths are accepted. The hosted sign-in integration separately uses the fixed Plex HTTPS authentication/resource endpoints. External redirects are blocked, HLS requests are checked before attaching credentials, a media/connect content-security policy restricts media to this origin and connections to this origin plus the two required Plex sign-in origins, and pages use a no-referrer policy. Plex Web links contain no token and use `noopener noreferrer`. All artwork and sample assets are local or served through the Plex proxy. There is no telemetry or analytics SDK.
 
 The Docker image supplies a local/LAN production reverse proxy with those protections. If placing another proxy in front, preserve the `/plex` prefix and streaming behavior, configure TLS and authentication for your deployment, and prevent token-bearing request URLs from entering access/error logs. Do not publicly expose the Vite development server or an arbitrary-target proxy.
 

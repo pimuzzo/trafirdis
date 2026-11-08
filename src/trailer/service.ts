@@ -80,7 +80,7 @@ export class TrailerService {
           offset: "0",
           session,
           "X-Plex-Session-Identifier": session,
-          "X-Plex-Client-Identifier": "plexplore-browser",
+          "X-Plex-Client-Identifier": this.client.clientIdentifier,
           "X-Plex-Product": "Plexplore",
           "X-Plex-Platform": "Chrome",
         });

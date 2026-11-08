@@ -21,3 +21,7 @@ The repository was inspected first and contained only Git metadata. The entire s
 ## Docker follow-up
 
 Added after the original MVP at the user's request: a multi-stage Dockerfile and Docker Compose service, static hosting plus a fixed-origin Nginx proxy, runtime Plex origin configuration, loopback-only publishing by default, non-root/read-only operation, and container/browser integration tests. No application backend or database was introduced. Docker request logging is disabled to prevent native media query tokens from appearing in logs. Session generation supports HTTP LAN browsers as well as secure origins. The real Plex server remains unvalidated; Docker tests use a synthetic local Plex fixture.
+
+## Plex sign-in follow-up
+
+Added hosted **Sign in with Plex** as the primary connection action after the user requested an integrated login. The existing manual-token workflow remains an advanced fallback. The implementation uses Plex’s documented strong-PIN authorization, verifies one-use return state, resolves the configured server through `/identity` and the Plex cloud resource list, and persists only its verified server-specific token. The browser handles authentication directly with Plex, keeping the app frontend-only and compatible with the existing Docker image. Automated tests simulate cloud authorization; real account/server validation remains outstanding.

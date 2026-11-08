@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PlexClient } from "./plex/client";
 import { ConnectionScreen } from "./components/ConnectionScreen";
@@ -25,20 +25,21 @@ export default function App() {
     }
     queries.clear();
   };
+  const connect = useCallback(
+    (value: string) => {
+      queries.clear();
+      try {
+        sessionStorage.setItem("plexplore.token", value);
+      } catch {
+        /* In-memory use remains available when storage is blocked. */
+      }
+      setToken(value);
+    },
+    [queries],
+  );
   if (!client && !sample)
     return (
-      <ConnectionScreen
-        onConnect={(value) => {
-          queries.clear();
-          try {
-            sessionStorage.setItem("plexplore.token", value);
-          } catch {
-            /* In-memory use remains available when storage is blocked. */
-          }
-          setToken(value);
-        }}
-        onSample={() => setSample(true)}
-      />
+      <ConnectionScreen onConnect={connect} onSample={() => setSample(true)} />
     );
   return (
     <Catalog

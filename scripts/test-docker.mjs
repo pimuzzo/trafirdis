@@ -169,6 +169,7 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(base);
   await page.getByText("http://plex-fixture:32400", { exact: true }).waitFor();
+  await page.getByText("Use a Plex token instead", { exact: true }).click();
   await page
     .getByLabel("Plex authentication token")
     .fill("docker-browser-fixture-token");
@@ -204,6 +205,7 @@ try {
   await page
     .getByRole("button", { name: "Disconnect and clear session" })
     .click();
+  await page.getByText("Use a Plex token instead", { exact: true }).click();
   await page
     .getByLabel("Plex authentication token")
     .fill("docker-browser-hls-token");
@@ -224,10 +226,82 @@ try {
     true,
   );
   assert.deepEqual(errors, []);
+  // Exercise hosted authorization through the actual production SPA callback.
+  await page.getByRole("button", { name: "Connection settings" }).click();
+  await page
+    .getByRole("button", { name: "Disconnect and clear session" })
+    .click();
+  const cloudHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  };
+  const loginRequests = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).origin === base)
+      loginRequests.push({
+        url: request.url(),
+        token: request.headers()["x-plex-token"],
+      });
+  });
+  await page.route(
+    (url) => url.hostname === "plex.tv" || url.hostname === "clients.plex.tv",
+    async (route) => {
+      const url = new URL(route.request().url());
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: cloudHeaders });
+        return;
+      }
+      const value =
+        url.pathname === "/api/v2/pins"
+          ? { id: 123, code: "docker-strong-pin", expiresIn: 600 }
+          : url.pathname === "/api/v2/pins/123"
+            ? { authToken: "docker-account-token" }
+            : [
+                {
+                  clientIdentifier: "docker-fixture",
+                  provides: "server",
+                  accessToken: "docker-server-token",
+                },
+              ];
+      await route.fulfill({ headers: cloudHeaders, json: value });
+    },
+  );
+  await page.route("https://app.plex.tv/auth**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<!doctype html><script>location.replace(new URLSearchParams(location.hash.slice(2)).get("forwardUrl"))</script>',
+    }),
+  );
+  await page
+    .getByRole("button", { name: "Sign in with Plex", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Docker First Light", exact: true })
+    .waitFor();
+  assert.equal(
+    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    "docker-server-token",
+  );
+  assert.equal(
+    await page.evaluate(() =>
+      sessionStorage.getItem("plexplore.pending-sign-in"),
+    ),
+    null,
+  );
+  assert.equal(new URL(page.url()).searchParams.has("plexplore_auth"), false);
+  assert.ok(
+    loginRequests.every(
+      (request) =>
+        request.token !== "docker-account-token" &&
+        !request.url.includes("docker-account-token"),
+    ),
+  );
+  assert.deepEqual(errors, []);
   await browser.close();
   browser = undefined;
   console.log(
-    "Docker browser: real catalog proxy, runtime server label, actual native and HLS trailer decoding, preview cleanup and production-only UI passed.",
+    "Docker browser: real catalog proxy, runtime server label, actual native and HLS trailer decoding, preview cleanup, hosted sign-in and production-only UI passed.",
   );
 
   for (const target of [
@@ -262,7 +336,7 @@ try {
   const logs = docker(["logs", app]);
   assert.doesNotMatch(
     logs.stdout + logs.stderr,
-    /synthetic-token|docker-browser-fixture-token|X-Plex-Token/,
+    /synthetic-token|docker-browser-fixture-token|docker-account-token|docker-server-token|X-Plex-Token/,
   );
   console.log(
     "Docker validation: invalid origins fail safely; offline Plex does not take down the SPA; request tokens stay out of container logs.",

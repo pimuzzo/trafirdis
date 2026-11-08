@@ -1,3 +1,4 @@
+import { usePlexSignIn } from "../hooks/usePlexSignIn";
 import { serverLabel } from "../config";
 import { useState } from "react";
 import { Brand, Icon } from "./Icon";
@@ -9,6 +10,7 @@ export function ConnectionScreen({
   onSample: () => void;
 }) {
   const [token, setToken] = useState("");
+  const login = usePlexSignIn(onConnect);
   return (
     <div className="welcome">
       <img className="welcome-art" src="/sample/orbit-wide.svg" alt="" />
@@ -51,40 +53,84 @@ export function ConnectionScreen({
             Connect your Plex library and make movie night a little more
             inspired.
           </p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (token.trim()) onConnect(token.trim());
+          <div className="server-label">
+            <span className="status-dot" />
+            {serverLabel}
+          </div>
+          <button
+            className="button primary"
+            onClick={() => void login.start()}
+            disabled={login.busy}
+          >
+            {login.status === "starting"
+              ? "Opening Plex…"
+              : login.status === "finishing"
+                ? "Completing sign-in…"
+                : "Sign in with Plex"}
+            <Icon name="external" size={17} />
+          </button>
+          {login.status === "finishing" && (
+            <p className="sign-in-progress" role="status">
+              Checking your Plex authorization and connecting to your server…
+            </p>
+          )}
+          {login.message && (
+            <p className="sign-in-error" role="alert">
+              {login.message}
+            </p>
+          )}
+          {login.busy && (
+            <button className="text-button" onClick={login.cancel}>
+              Cancel sign-in
+            </button>
+          )}
+          <p className="privacy-note">
+            Sign in on Plex’s official website. Plexplore never sees your
+            password. Server access stays in this browser session.
+          </p>
+          <details
+            className="manual-login"
+            onToggle={(event) => {
+              if (event.currentTarget.open) login.cancel();
             }}
           >
-            <label htmlFor="token">Plex authentication token</label>
-            <input
-              id="token"
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="Enter your Plex token"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              required
-            />
-            <div className="server-label">
-              <span className="status-dot" />
-              {serverLabel}
-            </div>
-            <button className="button primary" type="submit">
-              Connect my library
-              <Icon name="arrow" size={17} />
-            </button>
-          </form>
-          <p className="privacy-note">
-            Your token stays in this browser session. Plexplore never sends it
-            to third-party services.
-          </p>
+            <summary>Use a Plex token instead</summary>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (token.trim()) {
+                  login.cancel();
+                  onConnect(token.trim());
+                }
+              }}
+            >
+              <label htmlFor="token">Plex authentication token</label>
+              <input
+                id="token"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="Enter your Plex token"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                required
+              />
+              <button className="button primary" type="submit">
+                Connect my library
+                <Icon name="arrow" size={17} />
+              </button>
+            </form>
+          </details>
           <div className="divider">
             <span>Take a look around first</span>
           </div>
-          <button className="button secondary" onClick={onSample}>
+          <button
+            className="button secondary"
+            onClick={() => {
+              login.cancel();
+              onSample();
+            }}
+          >
             Explore the sample library
             <Icon name="arrow" size={16} />
           </button>

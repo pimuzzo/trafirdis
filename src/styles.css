@@ -1788,3 +1788,43 @@ td {
     margin: 5px 0 10px;
   }
 }
+.manual-login {
+  margin: 22px 0 30px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.manual-login summary {
+  font-size: 11px;
+  color: #acb0b9;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.manual-login summary:hover {
+  color: var(--accent);
+}
+.manual-login form {
+  margin-top: 18px;
+}
+.manual-login form > .button {
+  margin-top: 15px;
+}
+.sign-in-progress {
+  font-size: 11px;
+  color: #a9afb9;
+  line-height: 1.8;
+  margin: 16px 0;
+}
+.sign-in-error {
+  font-size: 11px;
+  line-height: 1.8;
+  color: #e8b6a3;
+  background: #442e2855;
+  border: 1px solid #c8836833;
+  padding: 12px;
+  border-radius: 6px;
+  margin: 16px 0;
+}
+.manual-login summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+}

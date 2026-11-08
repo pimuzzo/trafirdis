@@ -95,6 +95,10 @@ const server = createServer((req, res) => {
     req.on("close", () => clearTimeout(timer));
     return;
   }
+  if (url.pathname === "/identity") {
+    json({ MediaContainer: { machineIdentifier: "docker-fixture" } });
+    return;
+  }
   if (url.pathname === "/") {
     json({
       MediaContainer: {

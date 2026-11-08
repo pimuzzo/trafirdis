@@ -160,6 +160,7 @@ async function mockPlex(
 async function connect(page: Page) {
   await page.goto("/");
   await page.mouse.move(0, 0);
+  await page.getByText("Use a Plex token instead", { exact: true }).click();
   await page.getByLabel("Plex authentication token").fill("fixture-token");
   await page
     .getByRole("button", { name: "Connect my library", exact: true })
@@ -204,7 +205,7 @@ test("welcome and sample catalog are polished, usable, and entirely local", asyn
   await expect(page.getByLabel("Search movies")).toBeFocused();
   await page.keyboard.type("Paper Moons");
   await expect(
-    page.getByRole("heading", { name: "Paper Moons", exact: true }),
+    page.getByRole("heading", { name: "Paper Moons", exact: true, level: 1 }),
   ).toBeVisible();
   await expect(page.locator(".movie-grid [data-movie]")).toHaveCount(1);
   await page.getByLabel("Search movies").fill("no such title");
@@ -399,7 +400,9 @@ test("invalid tokens are recoverable and disconnect clears session storage", asy
     "Plex rejected the token",
   );
   await page.getByRole("button", { name: "Update connection" }).click();
-  await expect(page.getByLabel("Plex authentication token")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Sign in with Plex", exact: true }),
+  ).toBeVisible();
   expect(
     await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
   ).toBeNull();
