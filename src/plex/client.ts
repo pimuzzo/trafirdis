@@ -52,7 +52,7 @@ export class PlexClient {
     return {
       Accept: "application/json",
       ...(this.token ? { "X-Plex-Token": this.token } : {}),
-      "X-Plex-Product": "Plexplore",
+      "X-Plex-Product": "Trafirdis",
       "X-Plex-Client-Identifier": this.clientIdentifier,
     };
   }
@@ -67,8 +67,8 @@ export class PlexClient {
         "unsafe",
         "Plex returned an unsupported resource address.",
       );
-    const url = new URL(path, "https://plexplore.invalid");
-    if (url.origin !== "https://plexplore.invalid")
+    const url = new URL(path, "https://trafirdis.invalid");
+    if (url.origin !== "https://trafirdis.invalid")
       throw new PlexError(
         "unsafe",
         "Plex returned an external resource address.",
@@ -76,7 +76,7 @@ export class PlexClient {
     return `${url.pathname}${url.search}`;
   }
   resource(path: string): string {
-    const url = new URL(this.safePath(path), "https://plexplore.invalid");
+    const url = new URL(this.safePath(path), "https://trafirdis.invalid");
     url.searchParams.set("X-Plex-Token", this.token);
     return `${this.base}${url.pathname}${url.search}`;
   }

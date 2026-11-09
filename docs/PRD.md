@@ -1,4 +1,6 @@
-# PRD — Plex Discovery
+# PRD — Trafirdis
+
+Product naming has been updated to Trafirdis; the original MVP requirements are unchanged.
 
 **Version:** 0.1  
 **Status:** Ready for implementation  
@@ -9,15 +11,15 @@
 
 ## 1. Product Overview
 
-Plex Discovery is a self-hosted web application that provides a Netflix-like browsing and content discovery experience for an existing Plex library.
+Trafirdis is a self-hosted web application that provides a Netflix-like browsing and content discovery experience for an existing Plex library.
 
 The application allows users to explore their personal movie collection through genre-based carousels, cinematic artwork, automatic trailer previews, and contextual movie information.
 
-Unlike Plex, which focuses primarily on media management and playback, Plex Discovery focuses on helping users decide what to watch.
+Unlike Plex, which focuses primarily on media management and playback, Trafirdis focuses on helping users decide what to watch.
 
 The application does not replace Plex Media Server or its official clients.
 
-Users browse their library through Plex Discovery and watch the selected movie using Plex.
+Users browse their library through Trafirdis and watch the selected movie using Plex.
 
 ## 2. Goals
 

@@ -88,7 +88,7 @@ export class TrailerService {
           session,
           "X-Plex-Session-Identifier": session,
           "X-Plex-Client-Identifier": this.client.clientIdentifier,
-          "X-Plex-Product": "Plexplore",
+          "X-Plex-Product": "Trafirdis",
           "X-Plex-Platform": "Chrome",
         });
         attempts.push({

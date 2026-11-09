@@ -76,7 +76,7 @@ describe("Plex hosted sign-in", () => {
       "http://localhost:8080/?plexplore_auth=nonce",
     );
     expect(params.get("code")).toBe("code&forwardUrl=https://outside.example");
-    expect(params.get("context[device][product]")).toBe("Plexplore");
+    expect(params.get("context[device][product]")).toBe("Trafirdis");
     expect(() => signInUrl(pin, "id", "javascript:alert(1)")).toThrow(
       PlexSignInError,
     );

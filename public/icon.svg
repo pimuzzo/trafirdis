@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <!-- Copyright © 2026 Trafirdis contributors. Original project artwork. -->
+  <title id="title">Trafirdis application icon</title>
+  <rect x="3" y="3" width="58" height="58" rx="16" fill="#13252a"/>
+  <rect x="13" y="18" width="34" height="32" rx="7" fill="none" stroke="#93e5d1" stroke-width="3"/>
+  <path d="M24 28h13M30.5 28v13" fill="none" stroke="#f3f7f6" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M17 26h2m-2 16h2m22 0h2" stroke="#93e5d1" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="m47 7 2.5 6.5L56 16l-6.5 2.5L47 25l-2.5-6.5L38 16l6.5-2.5Z" fill="#bcb4ff"/>
+</svg>

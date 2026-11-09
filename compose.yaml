@@ -1,15 +1,16 @@
 services:
+  # Compatibility key: keep existing Compose services replaceable in place.
   plexplore:
     build:
       context: .
       args:
         VITE_SECTION_ORDER: ${VITE_SECTION_ORDER:-Recently Added,Continue Watching,Unwatched Movies}
-    image: plexplore:local
+    image: trafirdis:local
     ports:
-      - "${PLEXPLORE_BIND_IP:-127.0.0.1}:${PLEXPLORE_PORT:-8080}:8080"
+      - "${TRAFIRDIS_BIND_IP:-${PLEXPLORE_BIND_IP:-127.0.0.1}}:${TRAFIRDIS_PORT:-${PLEXPLORE_PORT:-8080}}:8080"
     environment:
       PLEX_SERVER_URL: ${PLEX_SERVER_URL:-http://192.168.178.46:32400}
-      PLEXPLORE_DIAGNOSTICS: ${PLEXPLORE_DIAGNOSTICS:-false}
+      TRAFIRDIS_DIAGNOSTICS: ${TRAFIRDIS_DIAGNOSTICS:-${PLEXPLORE_DIAGNOSTICS:-false}}
     restart: unless-stopped
     read_only: true
     tmpfs:

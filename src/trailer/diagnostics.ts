@@ -98,7 +98,7 @@ export function createDiagnosticReport(
 ) {
   return {
     schemaVersion: 1,
-    application: "Plexplore",
+    application: "Trafirdis",
     generatedAt: now.toISOString(),
     scope: "Selected sample; not a full-library scan",
     checks: [...new Set(movieIds)].slice(0, diagnosticSampleLimit).map((id) => {

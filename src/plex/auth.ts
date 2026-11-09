@@ -25,6 +25,7 @@ interface PlexResource {
   provides?: string;
   accessToken?: string;
 }
+// Persisted keys and the return-state query name are compatibility contracts.
 export const pendingSignInKey = "plexplore.pending-sign-in";
 const requestTimeout = 12000;
 
@@ -45,7 +46,7 @@ export class PlexSignInClient {
         ...init,
         headers: {
           Accept: "application/json",
-          "X-Plex-Product": "Plexplore",
+          "X-Plex-Product": "Trafirdis",
           "X-Plex-Version": "0.1.0",
           "X-Plex-Client-Identifier": this.clientId,
           ...init.headers,
@@ -237,7 +238,7 @@ export function signInUrl(
       "state",
       "The sign-in return address is invalid.",
     );
-  return `https://app.plex.tv/auth#?${new URLSearchParams({ clientID: clientId, code: pin.code, "context[device][product]": "Plexplore", forwardUrl: callback.href })}`;
+  return `https://app.plex.tv/auth#?${new URLSearchParams({ clientID: clientId, code: pin.code, "context[device][product]": "Trafirdis", forwardUrl: callback.href })}`;
 }
 export function savePendingSignIn(value: PendingSignIn) {
   try {

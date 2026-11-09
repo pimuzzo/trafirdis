@@ -1,3 +1,4 @@
+// Keep the existing storage namespace so authorized device identities survive upgrades.
 const key = "plexplore.client-id";
 let memoryId: string | undefined;
 

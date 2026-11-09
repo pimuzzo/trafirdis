@@ -17,13 +17,15 @@ esac
 PLEX_SERVER_URL=${PLEX_SERVER_URL%/}
 export PLEX_SERVER_URL
 
-PLEXPLORE_DIAGNOSTICS=${PLEXPLORE_DIAGNOSTICS:-false}
-case "$PLEXPLORE_DIAGNOSTICS" in
+TRAFIRDIS_DIAGNOSTICS=${TRAFIRDIS_DIAGNOSTICS:-${PLEXPLORE_DIAGNOSTICS:-false}}
+case "$TRAFIRDIS_DIAGNOSTICS" in
     true|false) ;;
-    *) printf '%s\n' 'PLEXPLORE_DIAGNOSTICS must be true or false.' >&2; exit 1 ;;
+    *) printf '%s\n' 'TRAFIRDIS_DIAGNOSTICS must be true or false.' >&2; exit 1 ;;
 esac
 
-envsubst '${PLEX_SERVER_URL}' < /etc/nginx/plexplore.conf.template > /tmp/plexplore-nginx.conf
-printf 'window.__PLEXPLORE_CONFIG__ = {"serverUrl":"%s","diagnostics":%s};\n' "$PLEX_SERVER_URL" "$PLEXPLORE_DIAGNOSTICS" > /tmp/plexplore-runtime.js
-printf '%s\n' 'Starting Plexplore on port 8080.'
-exec nginx -c /tmp/plexplore-nginx.conf -g 'daemon off;'
+envsubst '${PLEX_SERVER_URL}' < /etc/nginx/trafirdis.conf.template > /tmp/trafirdis-nginx.conf
+printf 'window.__TRAFIRDIS_CONFIG__ = {"serverUrl":"%s","diagnostics":%s};\n' "$PLEX_SERVER_URL" "$TRAFIRDIS_DIAGNOSTICS" > /tmp/trafirdis-runtime.js
+# Preserve the public runtime contract used by existing deployments.
+printf 'window.__PLEXPLORE_CONFIG__ = window.__TRAFIRDIS_CONFIG__;\n' >> /tmp/trafirdis-runtime.js
+printf '%s\n' 'Starting Trafirdis on port 8080.'
+exec nginx -c /tmp/trafirdis-nginx.conf -g 'daemon off;'
