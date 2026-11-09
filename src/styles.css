@@ -1586,6 +1586,37 @@ input::placeholder {
   overflow: auto;
   margin: 25px 0;
 }
+.diagnostics-search {
+  display: grid;
+  gap: 9px;
+  max-width: 440px;
+  margin: 22px 0;
+  color: #b0b5bd;
+  font-size: 12px;
+}
+.diagnostics-search input {
+  background: #0c0e12;
+  border: 1px solid #ffffff26;
+  border-radius: 7px;
+  padding: 12px;
+  color: #f0f1f4;
+  font: inherit;
+}
+.diagnostics-search input:focus-visible {
+  outline: 2px solid #d3ac68;
+  outline-offset: 2px;
+}
+.diagnostics-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.diagnostics-reason {
+  display: block;
+  margin-top: 6px;
+  color: #8f97a5;
+  font-size: 10px;
+}
 table {
   border-collapse: collapse;
   width: 100%;

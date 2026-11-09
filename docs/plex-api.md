@@ -50,7 +50,7 @@ Every preview restart resets the element and its audio control to muted, includi
 
 Unit tests use explicit synthetic Plex-shaped JSON, including both local parts and indirect extra keys. Browser tests use synthetic WebM/HLS media and actually decode them in Chromium. Proxy tests use a loopback HTTP fixture. These establish application behavior, not the behavior of the user's server or licensed extras provider.
 
-The configured private Plex IP was inaccessible through the managed environment's egress policy, and no Plex token was configured. Therefore the following remain open: actual extras JSON shape, successful server resolution of provider keys, actual codec/transcoding decisions, native Safari HLS behavior, session stop compatibility, and navigation in the user's Plex Web version. The development diagnostic view and the README's acceptance procedure make each of these testable locally without modifying the library.
+The configured private Plex IP was inaccessible through the managed environment's egress policy, and no Plex token was configured. Therefore the following remain open: actual extras JSON shape, successful server resolution of provider keys, actual codec/transcoding decisions, native Safari HLS behavior, session stop compatibility, and navigation in the user's Plex Web version. The opt-in diagnostic view and the README's acceptance procedure make each of these testable locally without modifying the library.
 
 ## Hosted Plex sign-in
 
@@ -61,3 +61,11 @@ A random one-use state value is checked on return. The account token returned by
 Authentication runs directly in the browser with credentials omitted, redirects rejected for API fetches, no-store requests, and a no-referrer policy. Plexplore never receives the Plex password or two-factor code. No auth token is placed in the callback URL or emitted in logs. A non-secret persistent client identifier identifies this app installation. Session storage contains the pending PIN/state only until completion/cancellation, then the server access token; the cloud account token is not persisted.
 
 Unit and real-browser tests cover PIN creation/polling, expiry, forged return state, cancellation, network errors, configured-server matching, per-server token selection, and manual/sample fallback. Docker tests cover the production runtime and simulated hosted sign-in. These tests use synthetic responses; live Plex account authorization, current cloud CORS behavior, and access to the user’s actual server remain to be validated in the user’s browser.
+
+## Runtime diagnostics and export
+
+The metadata inspection path still uses only `GET /library/metadata/{id}?includeExtras=1`. An explicit inspection invalidates in-memory entries for at most eight selected IDs, fetches them sequentially, and records metadata errors without misclassifying them as absent extras. It stops after denied authentication and aborts on cancellation. It does not construct stream attempts or call Plex metadata-refresh endpoints.
+
+Reports preserve observations while previews are paused and reset them when a new check or playback attempt starts. Only media/manifest events establish resolution and only a `playing` event establishes playback. Failure codes distinguish missing trailers, unavailable resources, authentication, network, timeout, response, unsafe resource, autoplay and codec problems. A playback failure reports the last attempted candidate's failure, not a speculative diagnosis of the provider. HTTP status is included only when observed by the metadata API client; native media failures expose no such status.
+
+The versioned JSON export serializes an explicit allowlist of numeric movie IDs, known phases, booleans, fixed source/method/failure values and bounded HTTP statuses. Unknowns are null. It never serializes Plex payloads, titles, credentials, server addresses, URLs or free-text errors. The browser downloads it locally without clipboard access or a network upload. Docker tests verify both runtime modes and report downloads from the same production image.

@@ -6,6 +6,7 @@ export class PlexError extends Error {
   constructor(
     public code: "auth" | "network" | "timeout" | "response" | "unsafe",
     message: string,
+    public status?: number,
   ) {
     super(message);
     this.name = "PlexError";
@@ -114,11 +115,13 @@ export class PlexClient {
         throw new PlexError(
           "auth",
           "Plex rejected the token. Check that it is current and has access to this server.",
+          response.status,
         );
       if (!response.ok)
         throw new PlexError(
           "response",
           `Plex could not complete this request (HTTP ${response.status}).`,
+          response.status,
         );
       const body: unknown = await response.json();
       if (

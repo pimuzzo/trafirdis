@@ -33,7 +33,20 @@ export interface TrailerReport {
   playbackSucceeded?: boolean;
   reason?: string;
   method?: string;
+  failure?: TrailerFailure;
+  httpStatus?: number;
 }
+export type TrailerFailure =
+  | "no-trailer"
+  | "no-playback-resource"
+  | "auth"
+  | "network"
+  | "timeout"
+  | "response"
+  | "unsafe"
+  | "autoplay"
+  | "unsupported"
+  | "unknown";
 export interface PlaybackAttempt {
   path: string;
   kind: "direct" | "hls";
