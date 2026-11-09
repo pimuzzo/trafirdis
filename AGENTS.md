@@ -1,7 +1,7 @@
 # Trafirdis development
 
 - Read `docs/COMPLIANCE.md` before changes affecting branding or identity, Plex integration/APIs, authentication or authorization, playback or trailers, external services, distribution or licensing. Follow its references and distinguish verified policy requirements from project-specific precautions. Investigate concrete conflicts and propose compliant alternatives; do not claim legal certification.
-- Use English for UI, documentation, code, comments, errors and configuration. Display the product name as Trafirdis and use `trafirdis` for new application identifiers. Plex API names and endpoints describe the integration and must not be renamed as branding.
+- Use English for UI, documentation, code, comments, errors and configuration. Display the product name as Trafirdis and use `trafirdis` for new application identifiers. Keep branding assets consistent with the existing charcoal, amber and ivory UI palette. Plex API names and endpoints describe the integration and must not be renamed as branding.
 - Preserve the existing MVP, Plex as the source of truth, and the frontend-only architecture. Keep changes focused; do not add unrelated features, dependencies, services or media providers.
 - Use only Trafirdis application identifiers for browser storage, sign-in return state, runtime configuration, environment settings and the Compose service. Do not restore previous branding aliases. Document namespace changes and deployment steps in README so users can sign in again and replace existing stacks safely.
 - Run appropriate checks and keep the GitHub Actions quality, browser and Docker jobs passing before reporting a PR ready. Never include real Plex credentials or library data in fixtures or uploaded artifacts.

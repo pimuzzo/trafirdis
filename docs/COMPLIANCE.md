@@ -16,7 +16,7 @@ The review used Plex-hosted policy text, not third-party summaries. Direct acces
 
 The trademark guidance permits unique application names with descriptive compatibility statements such as “for Plex.” It restricts Plex-derived product names, derivative marks and confusing visual presentation, and requires ownership attribution. Its icon guidance specifically addresses derivative play-symbol imagery.
 
-Use **Trafirdis** for the displayed name and `trafirdis` for new application identifiers. The name means **TRAiler FIRst DIScovery**. Use Plex names for compatibility and integration, with Trafirdis's own identity more prominent. Our original icon combines a film-frame T and discovery spark in mint and lavender; it uses no Plex logo, profile play symbol or copied brand asset. Generic transport controls are functional UI, not our logo.
+Use **Trafirdis** for the displayed name and `trafirdis` for new application identifiers. The name means **TRAiler FIRst DIScovery**. Use Plex names for compatibility and integration, with Trafirdis's own identity more prominent. Our original icon combines a film-frame T and discovery spark using the application's charcoal surface (`#171a20`), amber accent (`#e9b878`), warm highlight (`#f2c68c`) and ivory text (`#f3f2ef`). Keep that palette consistent across the icon, favicon, UI and privacy notice. The icon uses no Plex logo, profile play symbol or copied brand asset. Generic transport controls are functional UI, not our logo.
 
 Include this disclaimer in the README:
 
