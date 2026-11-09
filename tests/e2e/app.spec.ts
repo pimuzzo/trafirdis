@@ -166,6 +166,11 @@ async function mockPlex(
   });
   return requests;
 }
+function recentCards(page: Page) {
+  return page
+    .getByRole("region", { name: "Recently Added", exact: true })
+    .locator("[data-movie]");
+}
 async function connect(page: Page, random?: number) {
   await page.goto("/");
   if (random !== undefined)
@@ -300,9 +305,9 @@ test("welcome and sample catalog are polished, usable, and entirely local", asyn
   await expect(page.getByLabel("Search movies")).toBeFocused();
   await page.keyboard.type("Paper Moons");
   await expect(
-    page.locator(".movie-grid [data-movie]").filter({ hasText: "Paper Moons" }),
+    recentCards(page).filter({ hasText: "Paper Moons" }),
   ).toBeVisible();
-  await expect(page.locator(".movie-grid [data-movie]")).toHaveCount(1);
+  await expect(recentCards(page)).toHaveCount(1);
   await page.getByLabel("Search movies").fill("no such title");
   await expect(
     page.getByRole("heading", { name: "No films match this combination" }),
@@ -339,8 +344,10 @@ test("combines filters without additional Plex requests and supports keyboard na
   await page.getByLabel("Watch status").selectOption("unwatched");
   await page.getByLabel("Runtime").selectOption("medium");
   await page.getByLabel("Rating", { exact: true }).selectOption("8");
-  await expect(page.locator(".movie-grid [data-movie]")).toHaveCount(1);
-  await expect(page.locator(".movie-grid")).toContainText("First Light");
+  await expect(recentCards(page)).toHaveCount(1);
+  await expect(
+    page.getByRole("region", { name: "Recently Added", exact: true }),
+  ).toContainText("First Light");
   expect(requests.filter((r) => r.path.endsWith("/all"))).toHaveLength(before);
 });
 test("plays a native trailer after the delay, muted and inline, and stops on hiding", async ({
@@ -498,7 +505,7 @@ test("failed direct and HLS streams fall back to artwork", async ({ page }) => {
   await expect(page.locator(".hero-background img")).toBeVisible();
   await page.getByLabel("Search movies").fill("Third");
   await expect(
-    page.locator(".movie-grid [data-movie]").filter({ hasText: "Third Shore" }),
+    recentCards(page).filter({ hasText: "Third Shore" }),
   ).toBeVisible();
 });
 test("does not send a token to external HLS playlist resources", async ({
@@ -761,37 +768,47 @@ test("small screens have no horizontal overflow and dialogs stay usable", async 
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("lower rails keep the selected preview visible with only one video element", async ({
+test("lower rail focus stays quiet and opens a trailer only in details", async ({
   page,
 }) => {
-  await mockPlex(page, { trailer: "direct" });
+  const requests = await mockPlex(page, { trailer: "direct" });
   await connect(page);
-  const rail = page.getByRole("region", { name: "Drama", exact: true });
-  await rail.scrollIntoViewIfNeeded();
-  await rail
-    .locator('[data-movie="2"]')
-    .evaluate((element) =>
-      (element as HTMLElement).focus({ preventScroll: true }),
-    );
-  const dock = page.getByRole("complementary", {
-    name: "Selected movie preview",
-  });
-  await expect(dock).toBeVisible();
-  await expect(
-    dock.getByRole("heading", { name: "Second Chance" }),
-  ).toBeVisible();
-  await expect(dock.locator("[data-preview-phase]")).toHaveAttribute(
+  await expect(page.locator(".hero [data-preview-phase]")).toHaveAttribute(
     "data-preview-phase",
     "playing",
-    { timeout: 10000 },
   );
+  const rail = page.getByRole("region", { name: "Drama", exact: true });
+  await rail.scrollIntoViewIfNeeded();
+  const card = rail.locator('[data-movie="2"]');
+  await card.focus();
+  await expect(page.locator(".hero [data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "paused",
+  );
+  await page.waitForTimeout(1700);
   await expect(page.locator("video")).toHaveCount(1);
-  await dock
-    .getByRole("button", { name: "Dismiss selected movie preview" })
-    .click();
-  await expect(dock).toHaveCount(0);
   expect(
     await page.locator("video").evaluate((video) => video.hasAttribute("src")),
+  ).toBe(false);
+  expect(
+    requests.some((request) => request.path === "/library/metadata/2"),
+  ).toBe(false);
+  await card.click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Second Chance", exact: true }),
+  ).toBeVisible();
+  await expect(dialog.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  await expect(page.locator("video")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  expect(
+    await page
+      .locator(".hero video")
+      .evaluate((video) => video.hasAttribute("src")),
   ).toBe(false);
 });
 
@@ -831,16 +848,16 @@ test("details navigation stays in the opening category and restores focus and pa
   expect(await page.evaluate(() => scrollY)).toBe(position);
 });
 
-test("filtered results define the dialog sequence and a single result disables both directions", async ({
+test("filtered categories define the dialog sequence and a single result disables both directions", async ({
   page,
 }) => {
   await mockPlex(page, { trailer: "missing" });
   await connect(page);
   await page.getByLabel("Search movies").fill("Second");
-  await page.locator(".movie-grid [data-movie]").click();
+  await recentCards(page).click();
   const dialog = page.locator(".details-dialog");
   await expect(dialog.locator(".details-context")).toContainText(
-    "Search results",
+    "Recently Added",
   );
   await expect(dialog.getByRole("status")).toContainText("1 of 1");
   await expect(
@@ -856,7 +873,7 @@ test("filtered results define the dialog sequence and a single result disables b
   ).toBeVisible();
   await dialog.locator(".dialog-close").click();
   await expect(page.getByLabel("Search movies")).toHaveValue("Second");
-  await expect(page.locator(".movie-grid [data-movie]")).toHaveCount(1);
+  await expect(recentCards(page)).toHaveCount(1);
 });
 
 test("rapid dialog navigation cancels intermediate previews and keeps one player", async ({
@@ -1033,7 +1050,7 @@ test("hero is randomly chosen and stays stable through hover, filters and detail
     .hover();
   await expect(hero.locator("h1")).toHaveText("Third Shore");
   await page.getByLabel("Search movies").fill("First Light");
-  await expect(page.locator(".movie-grid [data-movie]")).toHaveCount(1);
+  await expect(recentCards(page)).toHaveCount(1);
   await expect(hero.locator("h1")).toHaveText("Third Shore");
   // The featured film can be outside the current filtered results.
   await hero.getByRole("button", { name: "More info" }).click();
@@ -1055,4 +1072,59 @@ test("hero is randomly chosen and stays stable through hover, filters and detail
   await expect(hero.locator("h1")).toHaveText("Third Shore");
   await page.reload();
   await expect(hero.locator("h1")).toHaveText("First Light");
+});
+
+test("Unwatched preserves categories, skips watched neighbors and combines with search", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "missing" });
+  await connect(page);
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "Unwatched", exact: true })
+    .click();
+  await expect(recentCards(page)).toHaveCount(2);
+  await expect(
+    page
+      .getByRole("region", { name: "Drama", exact: true })
+      .locator("[data-movie]"),
+  ).toHaveCount(1);
+  await expect(
+    page
+      .getByRole("region", { name: "Adventure", exact: true })
+      .locator("[data-movie]"),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("region", { name: "Science Fiction", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('[data-rail] [data-movie="2"]')).toHaveCount(0);
+  await recentCards(page).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator(".details-context")).toContainText(
+    "Recently Added",
+  );
+  await expect(dialog.getByRole("status")).toContainText("1 of 2");
+  await dialog.getByRole("button", { name: "Next movie" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "Third Shore", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Next movie" }),
+  ).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await page.getByLabel("Search movies").fill("First");
+  await expect(recentCards(page)).toHaveCount(1);
+  await expect(
+    page.getByRole("region", { name: "Drama", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Science Fiction", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await page.getByLabel("Watch status").selectOption("watched");
+  await page.getByLabel("Search movies").fill("");
+  await expect(recentCards(page)).toHaveCount(1);
+  await expect(
+    page.getByRole("region", { name: "Drama", exact: true }),
+  ).toContainText("Second Chance");
 });

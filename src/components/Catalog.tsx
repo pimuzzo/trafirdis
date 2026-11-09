@@ -1,5 +1,5 @@
 import { diagnosticsEnabled, serverLabel } from "../config";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PlexClient, errorMessage } from "../plex/client";
 import {
@@ -12,12 +12,11 @@ import {
 } from "../domain/movie";
 import { sampleMovies } from "../sample";
 import { Brand, Icon } from "./Icon";
-import { MovieRail, MovieCard } from "./MovieRail";
+import { MovieRail } from "./MovieRail";
 import { MovieDetails } from "./MovieDetails";
 import { Filters } from "./Filters";
 import { Dialog } from "./Dialog";
 import { Hero } from "./Hero";
-import { PreviewDock } from "./PreviewDock";
 import { TrailerService } from "../trailer/service";
 import { Preview } from "./Preview";
 import { useMovieLibrary } from "../hooks/useMovieLibrary";
@@ -38,9 +37,6 @@ export default function Catalog({
     [client],
   );
   const [diagnostics, setDiagnostics] = useState(false);
-  const heroHost = useRef<HTMLDivElement>(null);
-  const [heroVisible, setHeroVisible] = useState(true);
-  const [dockDismissed, setDockDismissed] = useState(false);
   useEffect(() => {
     const shortcut = (e: KeyboardEvent) => {
       if (
@@ -65,7 +61,6 @@ export default function Catalog({
     null,
   );
   const [settings, setSettings] = useState(false);
-  const [gridLimit, setGridLimit] = useState(40);
   const server = useQuery({
     queryKey: ["server"],
     queryFn: ({ signal }) => client!.server(signal),
@@ -98,21 +93,6 @@ export default function Catalog({
     movies,
     sample ? "sample" : `${serverKey || ""}:${libraryId || ""}`,
   );
-  const hasMovie = Boolean(featured);
-  useEffect(() => {
-    const element = heroHost.current;
-    if (!element) return;
-    const observer = new IntersectionObserver(
-      (entries) => setHeroVisible((entries[0]?.intersectionRatio || 0) >= 0.15),
-      { threshold: 0.15 },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [hasMovie]);
-  const dockMovie =
-    active && selected && !heroVisible && !dockDismissed && !details
-      ? active
-      : null;
   const rails = useMemo(
     () =>
       groupMovies(
@@ -141,17 +121,8 @@ export default function Catalog({
   ).length;
   const select = (movie: Movie) => {
     setSelected(movie.id);
-    setDockDismissed(false);
   };
-  const showDetails = (movie: Movie, source?: Rail) => {
-    const rail = source || {
-      title: filters.search
-        ? "Search results"
-        : activeFilters > 0
-          ? "Filtered movies"
-          : "Movie library",
-      movies: visible,
-    };
+  const showDetails = (movie: Movie, rail: Rail) => {
     const index = rail.movies.findIndex((item) => item.id === movie.id);
     if (index < 0) return;
     setSelected(movie.id);
@@ -241,20 +212,18 @@ export default function Catalog({
         </div>
       )}
       {featured && (
-        <div ref={heroHost}>
-          <Hero
-            movie={featured}
-            client={client}
-            trailers={trailers}
-            connectedServer={connectedServer}
-            total={movies.length}
-            previewVisible={!details && !dockMovie}
-            previewEnabled={!settings && !diagnostics}
-            onDetails={(movie) =>
-              showDetails(movie, { title: "Movie library", movies })
-            }
-          />
-        </div>
+        <Hero
+          movie={featured}
+          client={client}
+          trailers={trailers}
+          connectedServer={connectedServer}
+          total={movies.length}
+          previewVisible={!details}
+          previewEnabled={!settings && !diagnostics}
+          onDetails={(movie) =>
+            showDetails(movie, { title: "Movie library", movies })
+          }
+        />
       )}
       <main id="catalog" className="catalog" tabIndex={-1}>
         <div className="catalog-toolbar">
@@ -276,7 +245,6 @@ export default function Catalog({
                 value={libraryId}
                 onChange={(e) => {
                   selectLibrary(e.target.value);
-                  setGridLimit(40);
                   setSelected("");
                   setFilters(emptyFilters);
                 }}
@@ -377,41 +345,16 @@ export default function Catalog({
               )}
             </div>
           )}
-        {activeFilters > 0 ? (
-          <>
-            <div className="movie-grid" data-rail aria-label="Movie results">
-              {visible.slice(0, gridLimit).map((m) => (
-                <MovieCard
-                  key={m.id}
-                  movie={m}
-                  client={client}
-                  selected={active?.id === m.id}
-                  onSelect={select}
-                  onDetails={showDetails}
-                />
-              ))}
-            </div>
-            {visible.length > gridLimit && (
-              <button
-                className="button secondary grid-more"
-                onClick={() => setGridLimit(gridLimit + 40)}
-              >
-                Show more films
-              </button>
-            )}
-          </>
-        ) : (
-          rails.map((rail) => (
-            <MovieRail
-              key={`${libraryId}-${rail.title}`}
-              rail={rail}
-              client={client}
-              selected={active?.id}
-              onSelect={select}
-              onDetails={(movie) => showDetails(movie, rail)}
-            />
-          ))
-        )}
+        {rails.map((rail) => (
+          <MovieRail
+            key={`${libraryId}-${rail.title}`}
+            rail={rail}
+            client={client}
+            selected={active?.id}
+            onSelect={select}
+            onDetails={(movie) => showDetails(movie, rail)}
+          />
+        ))}
       </main>
       <footer className="app-footer">
         <Brand />
@@ -424,16 +367,6 @@ export default function Catalog({
           <span className="footer-separator">/</span>Made for your movie nights
         </span>
       </footer>
-      {dockMovie && (
-        <PreviewDock
-          movie={dockMovie}
-          client={client}
-          service={trailers}
-          enabled={!settings && !diagnostics}
-          onClose={() => setDockDismissed(true)}
-          onDetails={showDetails}
-        />
-      )}
       {details && (
         <MovieDetails
           movie={details.rail.movies[details.index]}

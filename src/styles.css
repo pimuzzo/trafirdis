@@ -885,19 +885,6 @@ input::placeholder {
   gap: 10px;
   font-size: 11px;
 }
-.movie-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 28px 20px;
-  margin-top: 30px;
-}
-.movie-grid .movie-card {
-  width: 100%;
-}
-.grid-more {
-  display: flex;
-  margin: 30px auto;
-}
 .app-footer {
   border-top: 1px solid #ffffff0a;
   margin: 0 4.7%;
@@ -1139,9 +1126,6 @@ input::placeholder {
     width: calc((100% - 140px) / 8);
     flex-basis: calc((100% - 140px) / 8);
   }
-  .movie-grid {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
-  }
 }
 @media (max-width: 1100px) {
   .welcome-main {
@@ -1170,9 +1154,6 @@ input::placeholder {
   .movie-card {
     width: calc((100% - 80px) / 5);
     flex-basis: calc((100% - 80px) / 5);
-  }
-  .movie-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
   .app-footer > p {
     display: none;
@@ -1276,10 +1257,6 @@ input::placeholder {
   }
   .rail-track {
     gap: 15px;
-  }
-  .movie-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 22px 14px;
   }
   .app-footer {
     gap: 12px;
@@ -1405,10 +1382,6 @@ input::placeholder {
   }
   .rail-track {
     gap: 13px;
-  }
-  .movie-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px 13px;
   }
   .movie-title {
     font-size: 11px;
@@ -1713,100 +1686,6 @@ td {
 }
 .rail-heading h2 {
   font-size: 17px;
-}
-.preview-dock {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 7;
-  width: 390px;
-  max-width: calc(100vw - 32px);
-  background: #161a21;
-  border: 1px solid #ffffff26;
-  border-radius: 10px;
-  box-shadow: 0 12px 65px #000b;
-  overflow: hidden;
-  animation: appear 0.2s ease-out;
-}
-.dock-visual {
-  aspect-ratio: 16/9;
-  position: relative;
-  overflow: hidden;
-  background: #151c26;
-}
-.dock-visual > .artwork {
-  height: 100%;
-  width: 100%;
-  object-fit: cover;
-}
-.preview-dock .compact-preview .preview-controls {
-  top: auto;
-  left: 12px;
-  bottom: 12px;
-  right: 12px;
-  gap: 6px;
-}
-.preview-dock .preview-state {
-  font-size: 7px;
-  max-width: 230px;
-  background: #080c12b3;
-}
-.dock-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 5;
-  background: #0c0e12b3;
-  border: 1px solid #ffffff2b;
-  width: 28px;
-  height: 28px;
-}
-.dock-copy {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 18px 20px;
-  align-items: center;
-}
-.dock-copy > .icon-button {
-  flex-shrink: 0;
-}
-.dock-copy > div {
-  min-width: 0;
-}
-.dock-copy .eyebrow {
-  font-size: 7px;
-  letter-spacing: 1.5px;
-}
-.dock-copy h3 {
-  font-size: 20px;
-  font-weight: 500;
-  letter-spacing: -0.4px;
-  margin: 6px 0 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dock-copy .movie-facts {
-  font-size: 10px;
-  gap: 13px;
-}
-.dock-copy .rating {
-  font-size: 11px;
-}
-@media (max-width: 540px) {
-  .preview-dock {
-    right: 16px;
-    bottom: 16px;
-    width: 330px;
-  }
-  .dock-copy {
-    padding: 14px 16px;
-  }
-  .dock-copy h3 {
-    font-size: 18px;
-    margin: 5px 0 10px;
-  }
 }
 .manual-login {
   margin: 22px 0 30px;
