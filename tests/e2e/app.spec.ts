@@ -420,7 +420,7 @@ test("does not send a token to external HLS playlist resources", async ({
   );
   expect(leaks).toBe(0);
 });
-test("diagnostics separate discovered metadata from playback and remain development-only", async ({
+test("diagnostics inspect a bounded sample without video requests and export only observations", async ({
   page,
 }) => {
   await mockPlex(page, { trailer: "missing" });
@@ -430,12 +430,178 @@ test("diagnostics separate discovered metadata from playback and remain developm
   });
   await page.getByRole("button", { name: "Connection settings" }).click();
   await page.getByRole("button", { name: "Trailer diagnostics" }).click();
-  await expect(page.getByRole("dialog")).toContainText("DEVELOPMENT ONLY");
+  await expect(page.getByRole("dialog")).toContainText("ADVANCED DIAGNOSTICS");
   await page.getByRole("button", { name: "Inspect sample metadata" }).click();
   await expect(
     page.getByRole("cell", { name: "Missing", exact: true }),
   ).toHaveCount(3);
   await expect(page.getByRole("dialog")).not.toContainText("fixture-token");
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download report" }).click();
+  const content = await readFile((await (await downloaded).path())!, "utf8");
+  const report = JSON.parse(content);
+  expect(report.checks).toHaveLength(3);
+  expect(
+    report.checks.every(
+      (check: { metadataFound: boolean; playbackSucceeded: null }) =>
+        check.metadataFound === false && check.playbackSucceeded === null,
+    ),
+  ).toBe(true);
+  expect(content).not.toMatch(
+    /fixture-token|First Light|https?:\/\/|X-Plex-Token/,
+  );
+});
+test("diagnostics distinguish a failed metadata request from a missing trailer", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "missing" });
+  await page.route("**/plex/library/metadata/2?*", (route) =>
+    route.fulfill({ status: 503, body: "private-response-fixture-token" }),
+  );
+  await connect(page);
+  await page.getByRole("button", { name: "Connection settings" }).click();
+  await page.getByRole("button", { name: "Trailer diagnostics" }).click();
+  await page.getByRole("button", { name: "Inspect sample metadata" }).click();
+  const row = page.getByRole("row").filter({ hasText: "Second Chance" });
+  await expect(row).toContainText("Metadata request failed");
+  await expect(
+    row.getByRole("cell", { name: "Request failed", exact: true }),
+  ).toBeVisible();
+  await expect(row).toContainText("HTTP 503");
+  await expect(
+    page.getByRole("cell", { name: "Missing", exact: true }),
+  ).toHaveCount(2);
+  await expect(page.getByRole("dialog")).not.toContainText("private-response");
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download report" }).click();
+  const content = await readFile((await (await downloaded).path())!, "utf8");
+  expect(
+    JSON.parse(content).checks.find(
+      (check: { movieId: string }) => check.movieId === "2",
+    ),
+  ).toMatchObject({
+    metadataFound: null,
+    failure: "response",
+    httpStatus: 503,
+  });
+  expect(content).not.toContain("fixture-token");
+});
+test("diagnostics report failed playback without classifying it as missing metadata", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "broken" });
+  await connect(page);
+  await expect(page.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "error",
+    { timeout: 15000 },
+  );
+  await page.getByRole("button", { name: "Connection settings" }).click();
+  await page.getByRole("button", { name: "Trailer diagnostics" }).click();
+  const row = page.getByRole("row").filter({ hasText: "First Light" });
+  await expect(row).toContainText("Playback failed");
+  await expect(
+    row.getByRole("cell", { name: "Found", exact: true }),
+  ).toBeVisible();
+  await expect(
+    row.getByRole("cell", { name: "Failed", exact: true }),
+  ).toBeVisible();
+});
+test("diagnostics can test a searched movie outside the current catalog filters", async ({
+  page,
+}) => {
+  const requests = await mockPlex(page, { trailer: "direct" });
+  await connect(page);
+  await page.getByLabel("Search movies").fill("First Light");
+  await page.getByRole("button", { name: "Connection settings" }).click();
+  await page.getByRole("button", { name: "Trailer diagnostics" }).click();
+  await page.getByLabel("Find a movie to inspect").fill("Third Shore");
+  await page.getByRole("button", { name: "Inspect sample metadata" }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Metadata found; playback not verified",
+  );
+  expect(
+    requests.some((request) => request.path.startsWith("/library/parts/3/")),
+  ).toBe(false);
+  await page.getByRole("button", { name: "Test preview" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Third Shore", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Search movies")).toHaveValue("");
+  await expect(page.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+    { timeout: 10000 },
+  );
+  await page.getByRole("button", { name: "Connection settings" }).click();
+  await page.getByRole("button", { name: "Trailer diagnostics" }).click();
+  await expect(
+    page.getByRole("row").filter({ hasText: "Third Shore" }),
+  ).toContainText("Playback verified");
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download report" }).click();
+  const report = JSON.parse(
+    await readFile((await (await downloaded).path())!, "utf8"),
+  );
+  expect(report.checks[0]).toMatchObject({
+    movieId: "3",
+    metadataFound: true,
+    urlResolved: true,
+    playbackSucceeded: true,
+    method: "Native direct play",
+  });
+});
+test("cancelling diagnostics stops the sample and ignores a late metadata response", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "missing" });
+  await connect(page);
+  await expect(page.getByText("No Plex preview available")).toBeVisible({
+    timeout: 10000,
+  });
+  await page.getByRole("button", { name: "Connection settings" }).click();
+  await page.getByRole("button", { name: "Trailer diagnostics" }).click();
+  const extraRequests: string[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("request", (request) => {
+    if (/\/library\/metadata\/[23]\?/.test(request.url()))
+      extraRequests.push(request.url());
+  });
+  let release: () => void = () => {};
+  let started: () => void = () => {};
+  let handled: () => void = () => {};
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const requested = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const completed = new Promise<void>((resolve) => {
+    handled = resolve;
+  });
+  await page.route("**/plex/library/metadata/1?*", async (route) => {
+    started();
+    await pending;
+    await route
+      .fulfill({ json: { MediaContainer: { Metadata: [] } } })
+      .catch(() => {});
+    handled();
+  });
+  await page.getByRole("button", { name: "Inspect sample metadata" }).click();
+  await requested;
+  await expect(
+    page.getByRole("button", { name: "Cancel inspection" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancel inspection" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Inspection cancelled");
+  await expect(
+    page.getByRole("button", { name: "Inspect sample metadata" }),
+  ).toBeEnabled();
+  release();
+  await completed;
+  expect(extraRequests).toEqual([]);
+  expect(errors).toEqual([]);
 });
 test("invalid tokens are recoverable and disconnect clears session storage", async ({
   page,

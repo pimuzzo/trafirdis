@@ -32,6 +32,33 @@ async function ready(url) {
   }
   throw new Error("Container health check did not become ready.");
 }
+function startApp(name, diagnostics = "false") {
+  names.push(name);
+  docker([
+    "run",
+    "-d",
+    "--name",
+    name,
+    "--network",
+    network,
+    "--publish",
+    "127.0.0.1::8080",
+    "--read-only",
+    "--tmpfs",
+    "/tmp:rw,noexec,nosuid,size=32m,mode=1777",
+    "--cap-drop",
+    "ALL",
+    "--security-opt",
+    "no-new-privileges:true",
+    "--env",
+    "PLEX_SERVER_URL=http://plex-fixture:32400",
+    "--env",
+    `PLEXPLORE_DIAGNOSTICS=${diagnostics}`,
+    image,
+  ]);
+  const address = docker(["port", name, "8080/tcp"]).stdout.trim();
+  return `http://${address}`;
+}
 try {
   docker(["image", "inspect", image]);
   docker(["network", "create", network]);
@@ -53,29 +80,7 @@ try {
     "-e",
     readFileSync("tests/docker/plex-fixture.mjs", "utf8"),
   ]);
-  names.push(app);
-  docker([
-    "run",
-    "-d",
-    "--name",
-    app,
-    "--network",
-    network,
-    "--publish",
-    "127.0.0.1::8080",
-    "--read-only",
-    "--tmpfs",
-    "/tmp:rw,noexec,nosuid,size=32m,mode=1777",
-    "--cap-drop",
-    "ALL",
-    "--security-opt",
-    "no-new-privileges:true",
-    "--env",
-    "PLEX_SERVER_URL=http://plex-fixture:32400",
-    image,
-  ]);
-  const address = docker(["port", app, "8080/tcp"]).stdout.trim();
-  const base = `http://${address}`;
+  const base = startApp(app);
   await ready(`${base}/healthz`);
   assert.equal(docker(["exec", app, "id", "-u"]).stdout.trim(), "101");
   assert.equal(
@@ -182,7 +187,12 @@ try {
     Object.defineProperty(crypto, "randomUUID", { value: undefined });
   });
   const errors = [];
+  const diagnosticChunks = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("request", (request) => {
+    if (/\/assets\/Diagnostics-/.test(request.url()))
+      diagnosticChunks.push(request.url());
+  });
   await page.goto(base);
   await page.getByText("http://plex-fixture:32400", { exact: true }).waitFor();
   await page.getByText("Use a Plex token instead", { exact: true }).click();
@@ -322,6 +332,105 @@ try {
     ),
   );
   assert.deepEqual(errors, []);
+  assert.deepEqual(diagnosticChunks, []);
+  // The same image enables advanced diagnostics only through runtime configuration.
+  const diagnosticApp = `${app}-diagnostics`;
+  const diagnosticBase = startApp(diagnosticApp, "true");
+  await ready(`${diagnosticBase}/healthz`);
+  assert.match(
+    await (await fetch(`${diagnosticBase}/runtime-config.js`)).text(),
+    /"diagnostics":true/,
+  );
+  const diagnosticPage = await browser.newPage();
+  await diagnosticPage.addInitScript(() => {
+    Object.defineProperty(crypto, "randomUUID", { value: undefined });
+  });
+  const diagnosticErrors = [];
+  const mediaRequests = [];
+  diagnosticPage.on("pageerror", (error) =>
+    diagnosticErrors.push(error.message),
+  );
+  diagnosticPage.on("request", (request) => {
+    if (
+      /\/plex\/(library\/parts\/|video\/:\/transcode\/universal\/start)/.test(
+        new URL(request.url()).pathname,
+      )
+    )
+      mediaRequests.push(request.url());
+  });
+  await diagnosticPage.goto(diagnosticBase);
+  await diagnosticPage
+    .getByText("Use a Plex token instead", { exact: true })
+    .click();
+  await diagnosticPage
+    .getByLabel("Plex authentication token")
+    .fill("docker-diagnostics-token");
+  await diagnosticPage
+    .getByRole("button", { name: "Connect my library", exact: true })
+    .click();
+  await diagnosticPage.waitForFunction(
+    () =>
+      document
+        .querySelector("[data-preview-phase]")
+        ?.getAttribute("data-preview-phase") === "playing",
+  );
+  const openDiagnostics = async () => {
+    await diagnosticPage
+      .getByRole("button", { name: "Connection settings" })
+      .click();
+    await diagnosticPage
+      .getByRole("button", { name: "Trailer diagnostics" })
+      .click();
+  };
+  const downloadReport = async () => {
+    const downloaded = diagnosticPage.waitForEvent("download");
+    await diagnosticPage
+      .getByRole("button", { name: "Download report" })
+      .click();
+    return JSON.parse(readFileSync(await (await downloaded).path(), "utf8"));
+  };
+  await openDiagnostics();
+  await diagnosticPage
+    .getByText("Playback verified", { exact: true })
+    .waitFor();
+  const mediaBefore = mediaRequests.length;
+  await diagnosticPage
+    .getByRole("button", { name: "Inspect sample metadata" })
+    .click();
+  await diagnosticPage
+    .getByText("Metadata found; playback not verified", { exact: true })
+    .waitFor();
+  assert.equal(mediaRequests.length, mediaBefore);
+  const metadataReport = await downloadReport();
+  assert.equal(metadataReport.schemaVersion, 1);
+  assert.equal(metadataReport.checks.length, 1);
+  assert.deepEqual(
+    {
+      metadata: metadataReport.checks[0].metadataFound,
+      url: metadataReport.checks[0].urlResolved,
+      playback: metadataReport.checks[0].playbackSucceeded,
+    },
+    { metadata: true, url: null, playback: null },
+  );
+  assert.doesNotMatch(
+    JSON.stringify(metadataReport),
+    /docker-diagnostics-token|X-Plex-Token|plex-fixture|Docker First Light|https?:/,
+  );
+  await diagnosticPage.getByRole("button", { name: "Test preview" }).click();
+  await diagnosticPage.waitForFunction(
+    () =>
+      document
+        .querySelector("[data-preview-phase]")
+        ?.getAttribute("data-preview-phase") === "playing",
+  );
+  await openDiagnostics();
+  const playbackReport = await downloadReport();
+  assert.equal(playbackReport.checks[0].playbackSucceeded, true);
+  assert.equal(playbackReport.checks[0].urlResolved, true);
+  assert.deepEqual(diagnosticErrors, []);
+  console.log(
+    "Docker diagnostics: disabled module stays unloaded; runtime opt-in, metadata-only inspection, fresh playback evidence and credential-free report downloads passed.",
+  );
   await browser.close();
   browser = undefined;
   console.log(
@@ -350,6 +459,28 @@ try {
     assert.equal(invalid.status, 1);
     assert.doesNotMatch(invalid.stdout + invalid.stderr, /synthetic-secret/);
   }
+  const badDiagnostics = docker(
+    [
+      "run",
+      "--rm",
+      "--read-only",
+      "--tmpfs",
+      "/tmp:rw,noexec,nosuid,size=32m,mode=1777",
+      "--env",
+      "PLEXPLORE_DIAGNOSTICS=true;synthetic-secret",
+      image,
+    ],
+    true,
+  );
+  assert.equal(badDiagnostics.status, 1);
+  assert.match(
+    badDiagnostics.stderr,
+    /PLEXPLORE_DIAGNOSTICS must be true or false/,
+  );
+  assert.doesNotMatch(
+    badDiagnostics.stdout + badDiagnostics.stderr,
+    /synthetic-secret/,
+  );
   // The static site remains available when Plex later goes offline.
   docker(["stop", fixture]);
   assert.equal((await fetch(`${base}/healthz`)).status, 200);
@@ -357,11 +488,13 @@ try {
   assert.ok(
     [502, 504].includes((await fetch(`${base}/plex/library/sections`)).status),
   );
-  const logs = docker(["logs", app]);
-  assert.doesNotMatch(
-    logs.stdout + logs.stderr,
-    /synthetic-token|docker-browser-fixture-token|docker-account-token|docker-server-token|X-Plex-Token/,
-  );
+  for (const name of [app, diagnosticApp]) {
+    const logs = docker(["logs", name]);
+    assert.doesNotMatch(
+      logs.stdout + logs.stderr,
+      /synthetic-token|docker-browser-fixture-token|docker-account-token|docker-server-token|docker-diagnostics-token|X-Plex-Token/,
+    );
+  }
   console.log(
     "Docker validation: invalid origins fail safely; offline Plex does not take down the SPA; request tokens stay out of container logs.",
   );

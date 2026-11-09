@@ -25,3 +25,11 @@ Added after the original MVP at the user's request: a multi-stage Dockerfile and
 ## Plex sign-in follow-up
 
 Added hosted **Sign in with Plex** as the primary connection action after the user requested an integrated login. The existing manual-token workflow remains an advanced fallback. The implementation uses Plex’s documented strong-PIN authorization, verifies one-use return state, resolves the configured server through `/identity` and the Plex cloud resource list, and persists only its verified server-specific token. The browser handles authentication directly with Plex, keeping the app frontend-only and compatible with the existing Docker image. Automated tests simulate cloud authorization; real account/server validation remains outstanding.
+
+## Trailer reliability follow-up
+
+After the MVP merge, added runtime opt-in diagnostics for Docker and production Vite builds. This deliberately extends the PRD's development-only view; production keeps the panel disabled and its module unloaded unless explicitly enabled. The app remains a frontend SPA with the existing fixed-origin proxy.
+
+Diagnostics can search the loaded library, inspect at most eight fresh metadata records sequentially, cancel pending work, and test a title outside catalog filters. Missing metadata, request failures, unavailable resources, autoplay denial and playback failures remain distinct. Rechecks and new preview attempts clear stale success; pausing preserves genuine observations. Downloaded reports use an explicit allowlist of numeric IDs, states and fixed error codes, excluding titles, credentials, addresses and raw error text. No additional provider, database, dependency or server write was introduced.
+
+The maintainer has confirmed browsing and previews on the real server with Chrome/Docker. Automated tests continue to use synthetic local Plex responses; full provider/codec, session-cleanup and deep-link acceptance remains pending. GitHub Actions runs the expanded unit, browser and Docker suites for this follow-up.

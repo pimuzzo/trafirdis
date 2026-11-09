@@ -1,4 +1,4 @@
-import { serverLabel } from "../config";
+import { diagnosticsEnabled, serverLabel } from "../config";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PlexClient, errorMessage } from "../plex/client";
@@ -19,7 +19,7 @@ import { Hero } from "./Hero";
 import { PreviewDock } from "./PreviewDock";
 import { TrailerService } from "../trailer/service";
 import { Preview } from "./Preview";
-const Diagnostics = import.meta.env.DEV
+const Diagnostics = diagnosticsEnabled
   ? lazy(() => import("./Diagnostics"))
   : null;
 export default function Catalog({
@@ -443,9 +443,12 @@ export default function Catalog({
         >
           <Diagnostics
             movies={movies}
+            selectedId={active?.id}
             service={trailers}
             onClose={() => setDiagnostics(false)}
             onTest={(movie) => {
+              setFilters(emptyFilters);
+              setView("discover");
               setSelected(movie.id);
               setDetails(null);
               setDiagnostics(false);

@@ -176,6 +176,43 @@ describe("automatic preview lifecycle", () => {
     });
     expect(playAttempt).not.toHaveBeenCalled();
   });
+  it("clears autoplay failure once the same media actually starts", async () => {
+    const { service, ref } = setup();
+    vi.mocked(playAttempt).mockImplementationOnce(
+      (video, attempt, client, signal, _resolved, playing, blocked) => {
+        blocked?.();
+        playing();
+        return pending(video, attempt, client, signal);
+      },
+    );
+    const { result } = renderHook(() => usePreview(ref, service, "A", true, 0));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(result.current).toMatchObject({
+      phase: "playing",
+      playbackSucceeded: true,
+    });
+    expect(result.current.failure).toBeUndefined();
+    expect(service.snapshot()[0].failure).toBeUndefined();
+  });
+  it("records the last candidate failure without inheriting an earlier codec error", async () => {
+    const { service, ref } = setup();
+    vi.spyOn(service, "attempts").mockReturnValue([
+      { path: "/direct", kind: "direct", source: "Plex trailer" },
+      { path: "/hls", kind: "hls", source: "Plex trailer" },
+    ]);
+    vi.mocked(playAttempt)
+      .mockRejectedValueOnce(
+        new PlaybackError("unsupported", "Unsupported codec"),
+      )
+      .mockRejectedValueOnce(new Error("private upstream detail"));
+    const { result } = renderHook(() => usePreview(ref, service, "A", true, 0));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(result.current).toMatchObject({
+      phase: "error",
+      failure: "unknown",
+      reason: "The trailer stream could not be played.",
+    });
+  });
   it("reports discovery failures while leaving browsing independent", async () => {
     const { service, discover, ref } = setup();
     discover.mockRejectedValue(new Error("Unexpected private detail"));

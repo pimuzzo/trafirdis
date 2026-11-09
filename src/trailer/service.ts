@@ -29,8 +29,15 @@ export class TrailerService {
     this.cache.clear();
     this.reports.clear();
   }
+  invalidate(id: string) {
+    this.cache.delete(id);
+    this.reports.delete(id);
+  }
   report(value: TrailerReport) {
-    const previous = this.reports.get(value.movieId);
+    // Pausing preserves observations; starting a new check never inherits success.
+    const previous = ["waiting", "discovering"].includes(value.phase)
+      ? undefined
+      : this.reports.get(value.movieId);
     this.reports.delete(value.movieId);
     this.reports.set(value.movieId, { ...previous, ...value });
     if (this.reports.size > 60)

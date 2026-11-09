@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { errorMessage } from "../plex/client";
+import { errorMessage, PlexError } from "../plex/client";
 import { playAttempt, PlaybackError, releaseVideo } from "../trailer/player";
 import type { TrailerService } from "../trailer/service";
-import type { TrailerReport } from "../trailer/types";
+import type { TrailerFailure, TrailerReport } from "../trailer/types";
 export function usePreview(
   videoRef: RefObject<HTMLVideoElement | null>,
   service: TrailerService | null,
@@ -53,7 +53,7 @@ export function usePreview(
           reason: discovery.reason,
         });
         if (!discovery.candidates.length) {
-          publish({ phase: "unavailable" });
+          publish({ phase: "unavailable", failure: "no-trailer" });
           return;
         }
         const attempts = service.attempts(discovery, (mime) =>
@@ -62,12 +62,14 @@ export function usePreview(
         if (!attempts.length) {
           publish({
             phase: "unavailable",
+            failure: "no-playback-resource",
             reason:
               "Plex returned trailer metadata without a supported server playback resource.",
           });
           return;
         }
         let lastFailure = "No playable trailer stream was found.";
+        let failure: TrailerFailure = "unknown";
         for (const attempt of attempts) {
           controller.signal.throwIfAborted();
           publish({
@@ -78,6 +80,7 @@ export function usePreview(
             urlResolved: false,
             playbackSucceeded: false,
             reason: undefined,
+            failure: undefined,
           });
           try {
             await playAttempt(
@@ -91,10 +94,13 @@ export function usePreview(
                   phase: "playing",
                   urlResolved: true,
                   playbackSucceeded: true,
+                  failure: undefined,
+                  reason: undefined,
                 }),
               () =>
                 publish({
                   phase: "blocked",
+                  failure: "autoplay",
                   reason:
                     "Your browser blocked autoplay. Use Play preview to start it.",
                 }),
@@ -105,17 +111,26 @@ export function usePreview(
             if (controller.signal.aborted) return;
             if (error instanceof PlaybackError) {
               lastFailure = error.message;
+              failure = error.code;
               if (error.code === "autoplay") {
-                publish({ phase: "blocked", reason: lastFailure });
+                publish({ phase: "blocked", reason: lastFailure, failure });
                 return;
               }
-            } else lastFailure = "The trailer stream could not be played.";
+            } else {
+              lastFailure = "The trailer stream could not be played.";
+              failure = "unknown";
+            }
           }
         }
-        publish({ phase: "error", reason: lastFailure });
+        publish({ phase: "error", reason: lastFailure, failure });
       } catch (error) {
         if (!controller.signal.aborted)
-          publish({ phase: "error", reason: errorMessage(error) });
+          publish({
+            phase: "error",
+            reason: errorMessage(error),
+            failure: error instanceof PlexError ? error.code : "unknown",
+            httpStatus: error instanceof PlexError ? error.status : undefined,
+          });
       }
     };
     const timer = setTimeout(() => void start(), retry > 0 ? 0 : delay);

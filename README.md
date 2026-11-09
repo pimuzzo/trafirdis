@@ -41,12 +41,13 @@ Open **http://localhost:8080** and choose **Sign in with Plex**. With the suppli
 
 Compose reads `.env` automatically. If you already configured `.env.local` for Vite, use `docker compose --env-file .env.local up --build -d` instead.
 
-| Docker setting       | Default                                             | Purpose                                                                                                                                                     |
-| -------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PLEX_SERVER_URL`    | `http://192.168.178.46:32400`                       | Plex origin reachable **from the container**. Applied at startup to both the proxy and the browser's server label; changing it does not require rebuilding. |
-| `PLEXPLORE_PORT`     | `8080`                                              | Published port on the Docker host.                                                                                                                          |
-| `PLEXPLORE_BIND_IP`  | `127.0.0.1`                                         | Host interface. Set `0.0.0.0` deliberately for access from other devices on your trusted LAN.                                                               |
-| `VITE_SECTION_ORDER` | `Recently Added,Continue Watching,Unwatched Movies` | Public rail order, passed to the frontend build. Rebuild after changing it.                                                                                 |
+| Docker setting          | Default                                             | Purpose                                                                                                                                                     |
+| ----------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PLEX_SERVER_URL`       | `http://192.168.178.46:32400`                       | Plex origin reachable **from the container**. Applied at startup to both the proxy and the browser's server label; changing it does not require rebuilding. |
+| `PLEXPLORE_DIAGNOSTICS` | `false`                                             | Enables advanced trailer diagnostics at container startup. Use `true` to inspect a sample and download a local report.                                      |
+| `PLEXPLORE_PORT`        | `8080`                                              | Published port on the Docker host.                                                                                                                          |
+| `PLEXPLORE_BIND_IP`     | `127.0.0.1`                                         | Host interface. Set `0.0.0.0` deliberately for access from other devices on your trusted LAN.                                                               |
+| `VITE_SECTION_ORDER`    | `Recently Added,Continue Watching,Unwatched Movies` | Public rail order, passed to the frontend build. Rebuild after changing it.                                                                                 |
 
 Use your Plex server's LAN IP or a hostname resolvable inside Docker. `localhost` inside the container refers to the container itself. If Plex runs on the Docker host, its LAN address is the simplest option; Docker Desktop also provides `host.docker.internal`. Linux host-gateway mappings or shared Docker networks can be supplied with a local Compose override if needed.
 
@@ -72,7 +73,7 @@ docker run --rm -p 127.0.0.1:8080:8080 \
   -e PLEX_SERVER_URL=http://192.168.178.46:32400 plexplore:local
 ```
 
-Docker deployments use the production UI, so development-only trailer diagnostics are absent. The original PRD did not require Docker; packaging was added in response to the subsequent request. The real-server acceptance checks below still apply.
+Docker deployments hide advanced trailer diagnostics by default. Set `PLEXPLORE_DIAGNOSTICS=true` to enable them without rebuilding the image. The original PRD did not require Docker; packaging was added in response to the subsequent request. The real-server acceptance checks below still apply.
 
 ## Configuration
 
@@ -97,7 +98,7 @@ Sign-in makes browser requests directly to `https://plex.tv` and `https://client
 
 **Use a Plex token instead** expands the advanced manual option. To obtain one manually, sign in to Plex Web, open a library item, choose **Get Info → View XML**, and copy the `X-Plex-Token` value from the opened URL. [Plex’s official token instructions](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) explain the procedure. A manually entered token can be used without a cloud sign-in request. Sample browsing still makes no Plex/cloud requests.
 
-Disconnect clears local access and catalog caches; it does not revoke Plex’s Authorized Devices entry. You can revoke the app through Plex’s account settings. Plex Home managed-user switching and automatic server selection remain outside this MVP. Live account authorization and the user’s actual PMS still require validation; automated sign-in tests simulate Plex responses and redirects.
+Disconnect clears local access and catalog caches; it does not revoke Plex’s Authorized Devices entry. You can revoke the app through Plex’s account settings. Plex Home managed-user switching and automatic server selection remain outside this MVP. Maintainer smoke testing has confirmed library browsing and Plex previews in Chrome/Docker. The automated sign-in tests simulate Plex responses and redirects; full account/server compatibility still needs the acceptance checks below.
 
 ## Browsing
 
@@ -124,9 +125,24 @@ Trailer discovery is an in-memory, 60-entry LRU cache with a five-minute expiry.
 
 ## Trailer diagnostics and real-server validation
 
-In development, open **Connection settings → Trailer diagnostics**. Production builds omit the diagnostic module and entry point. Inspect sample metadata processes at most eight films sequentially and does not request video streams. The table shows title, Plex identifier, metadata presence, source, observed URL resolution, observed playback, and failure/status. Test preview selects that film in the hero; reopen diagnostics to inspect its result. Playable URLs and tokens are never displayed.
+In development, open **Connection settings → Trailer diagnostics**. In Docker, enable the optional advanced panel at runtime:
 
-**Real-server acceptance remains unverified.** The implementation environment had no Plex credentials, and a request to the specified private address was rejected by its network proxy (`403 Domain forbidden`), rather than answered by Plex. This says nothing about your Plex server's availability. No response from your server was used as a fixture. Automatic previews were implemented against researched API behavior and synthetic responses, which is a necessary deviation from the PRD's request to validate this particular library first.
+```bash
+# Add PLEXPLORE_DIAGNOSTICS=true to .env, then recreate the container.
+docker compose up -d
+```
+
+Set the flag back to `false` and recreate the container to hide it again. Production defaults to disabled and does not load the diagnostic JavaScript chunk. The same public setting can be used by Vite production builds; changing it there requires rebuilding. Development always enables diagnostics.
+
+The panel starts with the selected movie and shows at most eight loaded titles. Search within the panel to inspect another film, including one excluded by catalog filters. Counts describe only this selected sample, not the entire library.
+
+**Inspect sample metadata** reads fresh details sequentially and clears cached discovery and earlier playback observations for this sample. It never starts streams and never asks Plex to refresh or modify its own metadata. Failed requests are recorded separately from missing extras; denied authentication stops the remaining sample. Cancel or close the panel to abort unfinished requests. Completed observations remain available.
+
+The table distinguishes missing metadata, discovered but unverified trailers, unsupported resources, failed playback, autoplay denial, and observed playback success. A new preview attempt resets old success rather than presenting it as evidence for the new attempt. **Test preview** closes the panel, clears catalog filters and selects the requested film in the hero. Reopen the panel to inspect its result.
+
+**Download report** saves a small JSON file locally with numeric Plex movie IDs, measured states, fixed failure codes and metadata-request HTTP statuses where available. It excludes titles, credentials, server addresses, playable URLs, raw response bodies and free-text errors. Unknown observations remain `null`; metadata alone never becomes playback success. Native media errors do not provide an HTTP status, so the report does not invent one. Downloads work on HTTP LAN origins without clipboard access. Reports are never uploaded automatically; share a report only when you choose to. Refreshing or disconnecting clears in-memory observations.
+
+**Full real-server acceptance remains pending.** Maintainer smoke testing confirmed browsing and Plex previews in Chrome/Docker; individual provider, codec, cleanup and deep-link combinations have not all been checked. The implementation environment had no Plex credentials, and a request to the specified private address was rejected by its network proxy (`403 Domain forbidden`), rather than answered by Plex. This says nothing about your Plex server's availability. No response from your server was used as a fixture. Automatic previews were implemented against researched API behavior and synthetic responses, which is a necessary deviation from the PRD's request to validate this particular library first.
 
 On your desktop:
 
@@ -185,7 +201,7 @@ The browser suite starts loopback-only Vite on the dedicated port 5175 with a lo
 
 - **Quality checks**: locked dependency installation, formatting (including workflow files), unit/integration tests, TypeScript, and a production build.
 - **Browser tests**: the complete Playwright suite against the local synthetic Plex fixture. CI installs Google Chrome so native and HLS tests exercise its media codec support. The HTML report and failure screenshots/traces are uploaded as `browser-test-results` for seven days.
-- **Docker integration**: builds the production image and runs the container/proxy/browser suite against a synthetic Plex server, including actual media decoding and hosted sign-in simulation.
+- **Docker integration**: builds the production image and runs the container/proxy/browser suite against a synthetic Plex server, including actual media decoding, hosted sign-in simulation, and diagnostics disabled/enabled using the same image.
 
 The workflow needs no Plex credentials, private-network access, repository secrets, or image-registry publishing permissions. Actions are pinned to commit SHAs and repository permissions are read-only. New commits cancel older runs for the same branch or pull request. CI rejects focused `test.only` cases and allows 60 seconds per browser test (30 seconds locally); it does not automatically retry failed tests. Local runs also retain traces for failures.
 
