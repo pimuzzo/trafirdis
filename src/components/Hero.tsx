@@ -59,7 +59,12 @@ export function Hero({
           </button>
         </div>
         <div className="hero-footnote">
-          <span className="mini-mark">p›</span>
+          <img
+            className="mini-mark"
+            src="/icon.svg"
+            alt=""
+            aria-hidden="true"
+          />
           <span>
             IN YOUR LIBRARY<span className="footnote-dot">·</span>
             {movie.genres.slice(0, 2).join(" / ") || "Movie"}

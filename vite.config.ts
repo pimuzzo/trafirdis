@@ -36,9 +36,9 @@ function privateMediaAuth(): Plugin {
 }
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const diagnostics = env.PLEXPLORE_DIAGNOSTICS || "false";
+  const diagnostics = env.TRAFIRDIS_DIAGNOSTICS || "false";
   if (!["true", "false"].includes(diagnostics))
-    throw new Error("PLEXPLORE_DIAGNOSTICS must be true or false.");
+    throw new Error("TRAFIRDIS_DIAGNOSTICS must be true or false.");
   const target = env.PLEX_SERVER_URL || "http://192.168.178.46:32400";
   const server = new URL(target);
   if (
@@ -97,7 +97,7 @@ export default defineConfig(({ mode }) => {
     plugins: [privateMediaAuth(), react()],
     define: {
       __PLEX_SERVER_LABEL__: JSON.stringify(server.origin),
-      __PLEXPLORE_DIAGNOSTICS__: diagnostics === "true",
+      __TRAFIRDIS_DIAGNOSTICS__: diagnostics === "true",
     },
     server: { host: "127.0.0.1", proxy },
     preview: { host: "127.0.0.1", proxy },

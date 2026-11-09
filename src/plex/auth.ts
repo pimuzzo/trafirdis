@@ -25,7 +25,8 @@ interface PlexResource {
   provides?: string;
   accessToken?: string;
 }
-export const pendingSignInKey = "plexplore.pending-sign-in";
+// Scope pending authorization and callback state to Trafirdis.
+export const pendingSignInKey = "trafirdis.pending-sign-in";
 const requestTimeout = 12000;
 
 export class PlexSignInClient {
@@ -45,7 +46,7 @@ export class PlexSignInClient {
         ...init,
         headers: {
           Accept: "application/json",
-          "X-Plex-Product": "Plexplore",
+          "X-Plex-Product": "Trafirdis",
           "X-Plex-Version": "0.1.0",
           "X-Plex-Client-Identifier": this.clientId,
           ...init.headers,
@@ -237,7 +238,7 @@ export function signInUrl(
       "state",
       "The sign-in return address is invalid.",
     );
-  return `https://app.plex.tv/auth#?${new URLSearchParams({ clientID: clientId, code: pin.code, "context[device][product]": "Plexplore", forwardUrl: callback.href })}`;
+  return `https://app.plex.tv/auth#?${new URLSearchParams({ clientID: clientId, code: pin.code, "context[device][product]": "Trafirdis", forwardUrl: callback.href })}`;
 }
 export function savePendingSignIn(value: PendingSignIn) {
   try {
@@ -256,12 +257,12 @@ export function clearSignInReturn() {
     /* Storage may be blocked. */
   }
   const url = new URL(window.location.href);
-  url.searchParams.delete("plexplore_auth");
+  url.searchParams.delete("trafirdis_auth");
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 export function readSignInReturn(): PendingSignIn | null {
   const state = new URL(window.location.href).searchParams.get(
-    "plexplore_auth",
+    "trafirdis_auth",
   );
   if (!state) return null;
   try {

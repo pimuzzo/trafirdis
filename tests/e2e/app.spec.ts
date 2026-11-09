@@ -166,6 +166,88 @@ async function connect(page: Page) {
     .getByRole("button", { name: "Connect my library", exact: true })
     .click();
 }
+test("Trafirdis identity, favicon and privacy notice are available without external requests", async ({
+  page,
+  request,
+}) => {
+  const external: string[] = [];
+  page.on("request", (event) => {
+    if (new URL(event.url()).origin !== "http://127.0.0.1:5175")
+      external.push(event.url());
+  });
+  await page.goto("/");
+  await expect(page).toHaveTitle("Trafirdis · Trailer-first discovery");
+  await expect(page.locator('meta[name="application-name"]')).toHaveAttribute(
+    "content",
+    "Trafirdis",
+  );
+  await expect(
+    page.getByText("Discover your next movie, one trailer at a time."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Privacy notice" }),
+  ).toHaveAttribute("href", "/privacy.html");
+  await expect
+    .poll(() =>
+      page
+        .locator(".welcome-header .brand-mark")
+        .evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
+    "href",
+    "/favicon.svg",
+  );
+  const favicon = await request.get("/favicon.svg");
+  expect(favicon.status()).toBe(200);
+  expect(favicon.headers()["content-type"]).toContain("image/svg+xml");
+  expect(await favicon.text()).toContain("Trafirdis");
+  const privacy = await request.get("/privacy.html");
+  expect(privacy.status()).toBe(200);
+  expect(await privacy.text()).toContain("Privacy notice · Trafirdis");
+  expect(external).toEqual([]);
+});
+test("Trafirdis reuses its browser session and keeps the device identity on disconnect", async ({
+  page,
+}) => {
+  const identityHeaders: Record<string, string>[] = [];
+  await mockPlex(page, { trailer: "missing" });
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === "/plex/" || path === "/plex/library/sections")
+      identityHeaders.push(request.headers());
+  });
+  await page.addInitScript(() => {
+    sessionStorage.setItem("trafirdis.token", "existing-session-token");
+    localStorage.setItem("trafirdis.client-id", "existing-device-identifier");
+  });
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "First Light", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Trafirdis home" }),
+  ).toBeVisible();
+  expect(identityHeaders.length).toBeGreaterThanOrEqual(2);
+  expect(
+    identityHeaders.every(
+      (headers) =>
+        headers["x-plex-token"] === "existing-session-token" &&
+        headers["x-plex-client-identifier"] === "existing-device-identifier" &&
+        headers["x-plex-product"] === "Trafirdis",
+    ),
+  ).toBe(true);
+  await page.getByRole("button", { name: "Connection settings" }).click();
+  await page
+    .getByRole("button", { name: "Disconnect and clear session" })
+    .click();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
+  ).toBeNull();
+  expect(
+    await page.evaluate(() => localStorage.getItem("trafirdis.client-id")),
+  ).toBe("existing-device-identifier");
+});
 test("welcome and sample catalog are polished, usable, and entirely local", async ({
   page,
 }) => {
@@ -616,7 +698,7 @@ test("invalid tokens are recoverable and disconnect clears session storage", asy
     page.getByRole("button", { name: "Sign in with Plex", exact: true }),
   ).toBeVisible();
   expect(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
   ).toBeNull();
 });
 test("handles a missing or empty movie library", async ({ page }) => {

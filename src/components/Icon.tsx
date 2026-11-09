@@ -47,10 +47,8 @@ export function Icon({
 export function Brand() {
   return (
     <span className="brand">
-      <span className="brand-mark" aria-hidden="true">
-        p<span>›</span>
-      </span>
-      plexplore<span className="brand-dot">.</span>
+      <img className="brand-mark" src="/icon.svg" alt="" aria-hidden="true" />
+      Trafirdis
     </span>
   );
 }

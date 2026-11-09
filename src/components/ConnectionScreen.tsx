@@ -25,10 +25,7 @@ export function ConnectionScreen({
             Your library.
             <br />A new perspective.
           </h1>
-          <p>
-            Somewhere in your collection is your next favorite film. Let’s find
-            it.
-          </p>
+          <p>Discover your next movie, one trailer at a time.</p>
           <div className="welcome-features">
             <span>
               <Icon name="film" />
@@ -85,8 +82,11 @@ export function ConnectionScreen({
             </button>
           )}
           <p className="privacy-note">
-            Sign in on Plex’s official website. Plexplore never sees your
-            password. Server access stays in this browser session.
+            Sign in on Plex’s official website. Trafirdis never sees your
+            password. Server access stays in this browser session.{" "}
+            <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
+              Privacy notice
+            </a>
           </p>
           <details
             className="manual-login"

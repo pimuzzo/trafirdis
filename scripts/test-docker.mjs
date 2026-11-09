@@ -5,10 +5,10 @@ import { resolve } from "node:path";
 import { chromium } from "@playwright/test";
 
 const suffix = `${process.pid}-${Date.now()}`;
-const network = `plexplore-test-${suffix}`;
-const app = `plexplore-app-${suffix}`;
-const fixture = `plexplore-fixture-${suffix}`;
-const image = process.env.PLEXPLORE_TEST_IMAGE || "plexplore:local";
+const network = `trafirdis-test-${suffix}`;
+const app = `trafirdis-app-${suffix}`;
+const fixture = `trafirdis-fixture-${suffix}`;
+const image = process.env.TRAFIRDIS_TEST_IMAGE || "trafirdis:local";
 const names = [];
 let browser;
 function docker(args, allowFailure = false) {
@@ -53,13 +53,59 @@ function startApp(name, diagnostics = "false") {
     "--env",
     "PLEX_SERVER_URL=http://plex-fixture:32400",
     "--env",
-    `PLEXPLORE_DIAGNOSTICS=${diagnostics}`,
+    `TRAFIRDIS_DIAGNOSTICS=${diagnostics}`,
     image,
   ]);
   const address = docker(["port", name, "8080/tcp"]).stdout.trim();
   return `http://${address}`;
 }
+function composeSettings(settings) {
+  const env = { ...process.env };
+  for (const name of [
+    "TRAFIRDIS_PORT",
+    "TRAFIRDIS_BIND_IP",
+    "TRAFIRDIS_DIAGNOSTICS",
+  ])
+    delete env[name];
+  Object.assign(env, settings);
+  const result = spawnSync(
+    "docker",
+    [
+      "compose",
+      "--file",
+      "compose.yaml",
+      "--env-file",
+      "/dev/null",
+      "config",
+      "--format",
+      "json",
+    ],
+    { env, encoding: "utf8", timeout: 60000 },
+  );
+  assert.equal(result.status, 0, "Compose configuration must parse.");
+  const service = JSON.parse(result.stdout).services.trafirdis;
+  assert.ok(service, "The Trafirdis service must exist.");
+  assert.equal(service.image, "trafirdis:local");
+  return {
+    port: String(service.ports[0].published),
+    host: service.ports[0].host_ip,
+    diagnostics: service.environment.TRAFIRDIS_DIAGNOSTICS,
+  };
+}
 try {
+  assert.deepEqual(composeSettings({}), {
+    port: "8080",
+    host: "127.0.0.1",
+    diagnostics: "false",
+  });
+  assert.deepEqual(
+    composeSettings({
+      TRAFIRDIS_PORT: "8090",
+      TRAFIRDIS_BIND_IP: "127.0.0.3",
+      TRAFIRDIS_DIAGNOSTICS: "true",
+    }),
+    { port: "8090", host: "127.0.0.3", diagnostics: "true" },
+  );
   docker(["image", "inspect", image]);
   docker(["network", "create", network]);
   names.push(fixture);
@@ -87,7 +133,19 @@ try {
     docker(["exec", app, "sh", "-c", "command -v node || true"]).stdout.trim(),
     "",
   );
-  assert.match(await (await fetch(base)).text(), /<title>Plexplore/);
+  assert.match(await (await fetch(base)).text(), /<title>Trafirdis/);
+  assert.match(
+    await (await fetch(`${base}/favicon.svg`)).text(),
+    /<title>Trafirdis/,
+  );
+  assert.match(
+    await (await fetch(`${base}/privacy.html`)).text(),
+    /Privacy notice · Trafirdis/,
+  );
+  assert.match(
+    await (await fetch(`${base}/NOTICE`)).text(),
+    /Copyright © 2026 Trafirdis contributors/,
+  );
   const config = await fetch(`${base}/runtime-config.js`);
   assert.match(config.headers.get("cache-control"), /no-store/);
   assert.match(await config.text(), /http:\/\/plex-fixture:32400/);
@@ -96,7 +154,7 @@ try {
   assert.equal((await fetch(`${base}/assets/missing.js`)).status, 404);
   assert.match(
     await (await fetch(`${base}/some/client/route`)).text(),
-    /<title>Plexplore/,
+    /<title>Trafirdis/,
   );
   const token = "synthetic-token-with+slash/equals=";
   let response = await fetch(`${base}/plex/echo`, {
@@ -314,16 +372,16 @@ try {
     .getByRole("heading", { name: "Docker First Light", exact: true })
     .waitFor();
   assert.equal(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
     "docker-server-token",
   );
   assert.equal(
     await page.evaluate(() =>
-      sessionStorage.getItem("plexplore.pending-sign-in"),
+      sessionStorage.getItem("trafirdis.pending-sign-in"),
     ),
     null,
   );
-  assert.equal(new URL(page.url()).searchParams.has("plexplore_auth"), false);
+  assert.equal(new URL(page.url()).searchParams.has("trafirdis_auth"), false);
   assert.ok(
     loginRequests.every(
       (request) =>
@@ -467,7 +525,7 @@ try {
       "--tmpfs",
       "/tmp:rw,noexec,nosuid,size=32m,mode=1777",
       "--env",
-      "PLEXPLORE_DIAGNOSTICS=true;synthetic-secret",
+      "TRAFIRDIS_DIAGNOSTICS=true;synthetic-secret",
       image,
     ],
     true,
@@ -475,7 +533,7 @@ try {
   assert.equal(badDiagnostics.status, 1);
   assert.match(
     badDiagnostics.stderr,
-    /PLEXPLORE_DIAGNOSTICS must be true or false/,
+    /TRAFIRDIS_DIAGNOSTICS must be true or false/,
   );
   assert.doesNotMatch(
     badDiagnostics.stdout + badDiagnostics.stderr,

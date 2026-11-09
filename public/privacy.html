@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      name="description"
+      content="How Trafirdis handles Plex access, local browser storage and diagnostic reports."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Privacy notice · Trafirdis</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: system-ui, sans-serif;
+        color: #f3f2ef;
+        background: #0c0e12;
+      }
+      body {
+        max-width: 740px;
+        margin: 0 auto;
+        padding: 48px 24px;
+        line-height: 1.75;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      header img {
+        width: 40px;
+        height: 40px;
+      }
+      h1 {
+        line-height: 1.3;
+        margin-top: 36px;
+      }
+      h2 {
+        margin-top: 32px;
+        font-size: 20px;
+      }
+      a {
+        color: #e9b878;
+        text-underline-offset: 3px;
+      }
+      footer {
+        margin-top: 40px;
+        border-top: 1px solid #ffffff12;
+        padding-top: 20px;
+        color: #94969e;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <header><img src="/icon.svg" alt="" /><strong>Trafirdis</strong></header>
+    <main>
+      <h1>Privacy notice</h1>
+      <p>
+        Trafirdis is an independent, unofficial interface for your personal Plex
+        library. This notice describes the application, not Plex's own data
+        practices.
+      </p>
+      <h2>Connections and data</h2>
+      <p>
+        The application reads movie metadata, artwork and watch status from the
+        Plex Media Server configured by your deployment. Preview streams pass
+        through the same fixed server proxy. There is no Trafirdis account
+        service, database, analytics SDK or telemetry.
+      </p>
+      <p>
+        Sign in with Plex opens Plex's official website. Passwords and
+        two-factor codes stay there. The browser contacts Plex's authentication
+        and resource APIs to authorize access and identify the configured
+        server. The account token is used transiently for this lookup; only the
+        verified server token is saved for the browser session. Manual token
+        entry avoids the hosted sign-in requests.
+      </p>
+      <h2>Local storage and diagnostics</h2>
+      <p>
+        The server access token and unfinished sign-in state use this tab's
+        session storage. A public client identifier uses local storage, with
+        session and memory fallbacks, to preserve this app instance's identity.
+        Catalog and trailer caches stay in memory. The sample library uses local
+        fictional content.
+      </p>
+      <p>
+        Disconnect clears local access and catalog caches. It does not revoke
+        Plex's Authorized Devices entry; manage that through Plex's account
+        settings. Browser extensions and scripts with access to this origin may
+        read session tokens. Native artwork/video URLs contain authentication,
+        so browser tools and an additional reverse proxy may see it. Built-in
+        request logging is disabled or sanitized, and HTTP LAN traffic is not
+        encrypted.
+      </p>
+      <p>
+        Optional diagnostics create reports locally when you choose Download
+        report. Reports include numeric movie IDs and observations, excluding
+        titles, credentials, addresses and stream URLs. They are not uploaded
+        automatically; any sharing is your choice.
+      </p>
+      <h2>Your deployment</h2>
+      <p>
+        Your deployment operator controls the Plex address, network exposure and
+        any additional proxy logs. Clearing browser data removes stored access
+        and the public client identifier. Consult Plex's policies for Plex's
+        processing and account controls.
+      </p>
+      <p>
+        <a
+          href="https://www.plex.tv/about/privacy-legal/plex-terms-of-service/"
+          rel="noreferrer"
+          >Plex Terms of Service</a
+        >
+        · <a href="/">Open Trafirdis</a>
+      </p>
+    </main>
+    <footer>
+      Copyright © 2026 Trafirdis contributors. Trafirdis is not affiliated with,
+      endorsed by, or sponsored by Plex.
+    </footer>
+  </body>
+</html>

@@ -1,5 +1,5 @@
 worker_processes auto;
-pid /tmp/plexplore-nginx.pid;
+pid /tmp/trafirdis-nginx.pid;
 # Nginx error messages can include original request URLs, including media tokens.
 # Deliberately disable request/error logging; startup validation still uses stderr.
 error_log /dev/null;
@@ -58,7 +58,7 @@ http {
             return 200 "healthy\n";
         }
         location = /runtime-config.js {
-            alias /tmp/plexplore-runtime.js;
+            alias /tmp/trafirdis-runtime.js;
             default_type application/javascript;
             add_header Cache-Control "no-store";
         }

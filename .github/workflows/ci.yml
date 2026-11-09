@@ -95,6 +95,6 @@ jobs:
       - name: Pull the synthetic Plex fixture image
         run: docker pull node:22-alpine
       - name: Build production image
-        run: docker build --tag plexplore:local .
+        run: docker build --tag trafirdis:local .
       - name: Test the production container and browser playback
         run: npm run test:docker

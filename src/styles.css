@@ -115,30 +115,12 @@ input::placeholder {
   letter-spacing: -1.2px;
   white-space: nowrap;
 }
-.brand-dot {
-  color: var(--accent);
-}
 .brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 11px;
-  background: var(--accent);
-  color: #111319;
-  width: 29px;
+  width: 32px;
   height: 32px;
-  border-radius: 7px;
-  font-size: 28px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -7px;
-  padding-right: 6px;
-  overflow: hidden;
-}
-.brand-mark > span {
-  font-size: 35px;
-  font-weight: 400;
-  margin-bottom: 2px;
+  margin-right: 11px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 .button {
   min-height: 43px;
@@ -603,11 +585,10 @@ input::placeholder {
   margin-top: 23px;
 }
 .mini-mark {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -4px;
+  width: 22px;
+  height: 22px;
   margin-right: 3px;
-  color: var(--accent);
+  object-fit: contain;
 }
 .footnote-dot {
   padding: 0 10px;
@@ -918,14 +899,8 @@ input::placeholder {
 }
 .app-footer .brand-mark {
   width: 20px;
-  height: 22px;
-  font-size: 20px;
-  border-radius: 5px;
+  height: 20px;
   margin-right: 7px;
-  letter-spacing: -5px;
-}
-.app-footer .brand-mark > span {
-  font-size: 25px;
 }
 .app-footer > p {
   font-size: 9px;
@@ -1858,4 +1833,11 @@ td {
 .manual-login summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 5px;
+}
+
+.privacy-note a,
+.settings-body a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

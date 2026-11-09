@@ -147,7 +147,7 @@ export default function Catalog({
         <a
           href="#"
           className="brand-link"
-          aria-label="Plexplore home"
+          aria-label="Trafirdis home"
           onClick={(e) => {
             e.preventDefault();
             setView("discover");
@@ -470,7 +470,10 @@ export default function Catalog({
             <p className="subtle">
               The Plex server address is configured by the deployment. Tokens
               are kept only for this browser session. Your library and watch
-              history are never changed.
+              history are never changed.{" "}
+              <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
+                Privacy notice
+              </a>
             </p>
             {Diagnostics && (
               <button

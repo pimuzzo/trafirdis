@@ -1,4 +1,5 @@
-const key = "plexplore.client-id";
+// Persist the public device identity across Trafirdis sessions.
+const key = "trafirdis.client-id";
 let memoryId: string | undefined;
 
 // This identifier is public device metadata, not an authentication token.

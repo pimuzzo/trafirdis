@@ -1,6 +1,12 @@
-# Plexplore
+# Trafirdis
 
-A cinematic, local-first discovery companion for your Plex movie library. Built with React, TypeScript, Vite, and TanStack Query. Plex remains the source of truth; Plexplore has no database, analytics, external metadata provider, or application backend.
+**Discover your next movie, one trailer at a time.**
+
+A trailer-first discovery experience for Plex. **Trafirdis** means **TRAiler FIRst DIScovery**: an interface for exploring your personal movie library through cinematic artwork, genre carousels and automatic trailer previews. Plex Media Server is the initially supported integration. React, TypeScript, Vite and TanStack Query power a frontend SPA with no application backend, separate movie database, analytics or external metadata provider.
+
+Trafirdis is an independent, unofficial open-source project and is not affiliated with, endorsed by, or sponsored by Plex.
+
+Plex and Plex Media Server are trademarks of Plex and used under a license. See [compliance guidance](docs/COMPLIANCE.md) for the applicable trademark license, integration policies and unresolved questions, the [privacy notice](public/privacy.html) for application data practices, and [NOTICE](NOTICE) for copyright and attribution. A source-code license has not yet been selected; the open-source identity is project intent rather than a license grant.
 
 ## Run locally
 
@@ -12,7 +18,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open **http://127.0.0.1:5173**. The default proxy target is `http://192.168.178.46:32400`; change `PLEX_SERVER_URL` in `.env.local` if needed, then restart Vite. Choose **Sign in with Plex**, authorize Plexplore on Plex’s official website, and return to your library. Plexplore never asks for your Plex password. An advanced manual-token option remains available; do not paste tokens into issues, source files, screenshots, or chat.
+Open **http://127.0.0.1:5173**. The default proxy target is `http://192.168.178.46:32400`; change `PLEX_SERVER_URL` in `.env.local` if needed, then restart Vite. Choose **Sign in with Plex**, authorize Trafirdis on Plex’s official website, and return to your library. Trafirdis never asks for your Plex password. An advanced manual-token option remains available; do not paste tokens into issues, source files, screenshots, or chat.
 
 You can also choose **Explore the sample library**. It contains twelve explicitly fictional movies and locally bundled original illustrations. It makes no Plex or third-party requests and does not simulate successful trailers.
 
@@ -27,7 +33,7 @@ Open **http://127.0.0.1:4173**. Vite Preview includes the same Plex proxy. Devel
 
 ## Run with Docker
 
-Plexplore remains a frontend SPA. Docker packages a production build with **Nginx serving static files and proxying `/plex/`**. It does not run an application backend, database, Plex server, or custom transcoder. Only Docker Engine/Desktop and Docker Compose v2 are required on the host.
+Trafirdis remains a frontend SPA. Docker packages a production build with **Nginx serving static files and proxying `/plex/`**. It does not run an application backend, database, Plex server, or custom transcoder. Only Docker Engine/Desktop and Docker Compose v2 are required on the host.
 
 From your project checkout:
 
@@ -44,9 +50,9 @@ Compose reads `.env` automatically. If you already configured `.env.local` for V
 | Docker setting          | Default                                             | Purpose                                                                                                                                                     |
 | ----------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PLEX_SERVER_URL`       | `http://192.168.178.46:32400`                       | Plex origin reachable **from the container**. Applied at startup to both the proxy and the browser's server label; changing it does not require rebuilding. |
-| `PLEXPLORE_DIAGNOSTICS` | `false`                                             | Enables advanced trailer diagnostics at container startup. Use `true` to inspect a sample and download a local report.                                      |
-| `PLEXPLORE_PORT`        | `8080`                                              | Published port on the Docker host.                                                                                                                          |
-| `PLEXPLORE_BIND_IP`     | `127.0.0.1`                                         | Host interface. Set `0.0.0.0` deliberately for access from other devices on your trusted LAN.                                                               |
+| `TRAFIRDIS_DIAGNOSTICS` | `false`                                             | Enables advanced trailer diagnostics at container startup. Use `true` to inspect a sample and download a local report.                                      |
+| `TRAFIRDIS_PORT`        | `8080`                                              | Published port on the Docker host.                                                                                                                          |
+| `TRAFIRDIS_BIND_IP`     | `127.0.0.1`                                         | Host interface. Set `0.0.0.0` deliberately for access from other devices on your trusted LAN.                                                               |
 | `VITE_SECTION_ORDER`    | `Recently Added,Continue Watching,Unwatched Movies` | Public rail order, passed to the frontend build. Rebuild after changing it.                                                                                 |
 
 Use your Plex server's LAN IP or a hostname resolvable inside Docker. `localhost` inside the container refers to the container itself. If Plex runs on the Docker host, its LAN address is the simplest option; Docker Desktop also provides `host.docker.internal`. Linux host-gateway mappings or shared Docker networks can be supplied with a local Compose override if needed.
@@ -56,7 +62,7 @@ After editing runtime settings, run `docker compose up -d` to recreate the conta
 ```bash
 docker compose ps          # Container and health status
 docker compose logs        # Startup messages; request/error logging is disabled
-docker compose down        # Stop Plexplore; the Plex server is separate
+docker compose down        # Stop Trafirdis; the Plex server is separate
 ```
 
 The image runs as the unprivileged `nginx` user on container port 8080. Compose drops capabilities, uses a read-only root filesystem and temporary `/tmp`, and publishes only on loopback by default. The health check verifies the static server, so an offline Plex server does not take down the SPA. Metadata and media pass through one fixed configured origin; streams are unbuffered, range requests are preserved, local redirects stay under `/plex`, and external redirects are rejected.
@@ -68,12 +74,36 @@ When Plex redirects native artwork or video to another resource on the configure
 For a manual image build:
 
 ```bash
-docker build -t plexplore:local .
+docker build -t trafirdis:local .
 docker run --rm -p 127.0.0.1:8080:8080 \
-  -e PLEX_SERVER_URL=http://192.168.178.46:32400 plexplore:local
+  -e PLEX_SERVER_URL=http://192.168.178.46:32400 trafirdis:local
 ```
 
-Docker deployments hide advanced trailer diagnostics by default. Set `PLEXPLORE_DIAGNOSTICS=true` to enable them without rebuilding the image. The original PRD did not require Docker; packaging was added in response to the subsequent request. The real-server acceptance checks below still apply.
+Docker deployments hide advanced trailer diagnostics by default. Set `TRAFIRDIS_DIAGNOSTICS=true` to enable them without rebuilding the image. The original PRD did not require Docker; packaging was added in response to the subsequent request. The real-server acceptance checks below still apply.
+
+## Upgrading an existing installation
+
+The rebrand uses only Trafirdis identifiers, including the Compose service, browser storage, sign-in return parameter and public runtime configuration. Previous application-specific aliases are no longer accepted.
+
+Before updating an existing Docker checkout, stop its stack using the previous Compose file so the old service does not keep the port occupied:
+
+```bash
+docker compose down
+```
+
+Update the checkout and use `TRAFIRDIS_PORT`, `TRAFIRDIS_BIND_IP` and `TRAFIRDIS_DIAGNOSTICS` in your `.env` file. `PLEX_SERVER_URL` and `VITE_SECTION_ORDER` retain their names. Then rebuild and start the Trafirdis service:
+
+```bash
+docker compose up --build -d
+```
+
+Keep the current Compose project name when updating. If you move the checkout later, preserve its existing `COMPOSE_PROJECT_NAME` or stop the previous deployment first. These steps do not change Plex library data.
+
+Finish or cancel pending sign-ins before upgrading, then sign in again afterward. Trafirdis uses browser keys under `trafirdis.*` and the `trafirdis_auth` return-state query parameter; previous browser data is neither imported nor deleted. A new public client identifier is generated for the Trafirdis namespace. Previous authorizations can be revoked separately in Plex account settings.
+
+Custom runtime integrations must supply `window.__TRAFIRDIS_CONFIG__`. Test scripts accept `TRAFIRDIS_TEST_IMAGE` (default `trafirdis:local`).
+
+The intended hosted repository name is `trafirdis`. Repository settings and Git remote URLs are not changed by this rebrand; the maintainer renames the repository separately. Previously downloaded reports and device labels managed by Plex may retain their historical name.
 
 ## Configuration
 
@@ -88,11 +118,11 @@ Never create a `VITE_PLEX_TOKEN` setting: Vite embeds `VITE_` variables in publi
 
 ## Sign in with Plex
 
-Choose **Sign in with Plex** on the connection screen. Plexplore creates a strong PIN using Plex’s documented authorization flow, then redirects this tab to `https://app.plex.tv/auth`. Sign in there, including any two-factor authentication Plex requires, and authorize **Plexplore**. Plex returns the browser to this same application origin. No password, PIN entry, client secret, public callback service, or custom backend is required by Plexplore.
+Choose **Sign in with Plex** on the connection screen. Trafirdis creates a strong PIN using Plex’s documented authorization flow, then redirects this tab to `https://app.plex.tv/auth`. Sign in there, including any two-factor authentication Plex requires, and authorize **Trafirdis**. Plex returns the browser to this same application origin. No password, PIN entry, client secret, public callback service, or custom backend is required by Trafirdis.
 
 The pending flow is kept in this tab’s session storage with a random return-state value. The return must match the stored state and client identifier, and authorization is bounded by Plex’s reported expiry and a maximum local lifetime of ten minutes. Cancel sign-in aborts requests and polling. Invalid, expired, rejected, interrupted, or throttled sign-in stays on the connection screen with a recoverable error.
 
-After authorization, Plexplore reads the fixed configured server’s unauthenticated `/identity` endpoint and matches its `machineIdentifier` to the authenticated Plex cloud resource list. It obtains that server’s `accessToken`, verifies it against the configured server, and stores **only the server token** in the browser session. The broader Plex account token is used transiently only with Plex’s resource API and is not saved or sent to the media server. Connection URLs returned by the resource list are ignored: signing in does not change your configured proxy target.
+After authorization, Trafirdis reads the fixed configured server’s unauthenticated `/identity` endpoint and matches its `machineIdentifier` to the authenticated Plex cloud resource list. It obtains that server’s `accessToken`, verifies it against the configured server, and stores **only the server token** in the browser session. The broader Plex account token is used transiently only with Plex’s resource API and is not saved or sent to the media server. Connection URLs returned by the resource list are ignored: signing in does not change your configured proxy target.
 
 Sign-in makes browser requests directly to `https://plex.tv` and `https://clients.plex.tv`; the container still serves only static files and proxies the configured media server. Internet access and browser session storage are required for hosted sign-in. The page’s connection policy allows these two Plex origins specifically. Other Plex servers listed in your account are not contacted. The non-secret client identifier is reused from local storage, with session/in-memory fallbacks, so Plex can identify this app instance in Authorized Devices.
 
@@ -114,12 +144,12 @@ Disconnect clears local access and catalog caches; it does not revoke Plex’s A
 1. A stable selection waits **1.5 seconds** before fetching details with `includeExtras=1`. Rapid selections cancel pending work.
 2. The isolated adapter prefers extras explicitly identified as trailers. `sceneOrSample` extras are secondary previews. Interviews, featurettes, and arbitrary extras are never treated as trailers.
 3. Supported, local Plex media parts are attempted in the native HTML5 video element. `canPlayType` is a capability hint; it is never recorded as playback success.
-4. For indirect assets or incompatible native formats, Plexplore requests **Plex Media Server's own HLS streaming endpoint** using the extra's key, never the parent movie's key. Native HLS is used where available. Otherwise a dynamically imported `hls.js` implementation supplies Media Source Extensions playback. If a native HLS attempt fails, an MSE fallback is available.
+4. For indirect assets or incompatible native formats, Trafirdis requests **Plex Media Server's own HLS streaming endpoint** using the extra's key, never the parent movie's key. Native HLS is used where available. Otherwise a dynamically imported `hls.js` implementation supplies Media Source Extensions playback. If a native HLS attempt fails, an MSE fallback is available.
 5. Only a loaded media/manifest event establishes URL resolution; only an actual `playing` event establishes playback success. Metadata discovery and constructing a candidate URL do neither.
 6. One video element is active. Switching films, opening an occluding dialog, hiding the tab, leaving the visible preview area, pausing, or unmounting aborts work and unloads the stream. Details use the same preview mechanism in their own visible surface. Selection changes reset audio to muted. Previews do not loop.
 7. Startup or buffering stalls time out after 12 seconds. A failed candidate advances to the next candidate, then returns to static artwork. Autoplay denial keeps the source ready for the explicit Play preview button. Failures never disable catalog navigation.
 
-Plexplore never sends timeline, scrobble, playback-progress, play-queue, library-edit, or metadata-refresh calls. Streaming may create a temporary PMS transcoder session; cleanup makes a best-effort stop call scoped to that preview session. This uses Plex's existing streaming capabilities, not a custom transcoder or full-movie playback engine.
+Trafirdis never sends timeline, scrobble, playback-progress, play-queue, library-edit, or metadata-refresh calls. Streaming may create a temporary PMS transcoder session; cleanup makes a best-effort stop call scoped to that preview session. This uses Plex's existing streaming capabilities, not a custom transcoder or full-movie playback engine.
 
 Trailer discovery is an in-memory, 60-entry LRU cache with a five-minute expiry. Failures and cancelled fetches are not cached. TanStack Query caches catalog data for five minutes and collects inactive queries after ten minutes. Refresh clears trailer discovery and refetches catalog metadata. No movie catalog persists across reloads.
 
@@ -128,7 +158,7 @@ Trailer discovery is an in-memory, 60-entry LRU cache with a five-minute expiry.
 In development, open **Connection settings → Trailer diagnostics**. In Docker, enable the optional advanced panel at runtime:
 
 ```bash
-# Add PLEXPLORE_DIAGNOSTICS=true to .env, then recreate the container.
+# Add TRAFIRDIS_DIAGNOSTICS=true to .env, then recreate the container.
 docker compose up -d
 ```
 
@@ -156,11 +186,11 @@ See [API research and compatibility assumptions](docs/plex-api.md) and [phase de
 
 ## Plex prerequisites and limitations
 
-Plex Pass does not guarantee every title has a trailer or that every browser can decode it. Plex's **Find extras** option must be enabled in the movie library's Advanced settings. Plex's own account, metadata agent, provider availability, and internet connection govern online extras. Existing metadata may need refreshing **in Plex** after changing those settings; Plexplore does not modify it. [Plex's trailer and extras documentation](https://support.plex.tv/articles/202934883-cinema-trailers-extras/) describes these requirements.
+Plex Pass does not guarantee every title has a trailer or that every browser can decode it. Plex's **Find extras** option must be enabled in the movie library's Advanced settings. Plex's own account, metadata agent, provider availability, and internet connection govern online extras. Existing metadata may need refreshing **in Plex** after changing those settings; Trafirdis does not modify it. [Plex's trailer and extras documentation](https://support.plex.tv/articles/202934883-cinema-trailers-extras/) describes these requirements.
 
 - Supported target: current desktop Chromium on Linux with native WebM/MP4 capabilities and MSE for Plex HLS. Native direct playback and Plex-shaped HLS playback are verified with generated local fixtures in Chromium. Actual PMS responses and provider streams require the checks above.
 - Native HLS paths and responsive layouts are implemented for future Safari/tablet support; actual Safari, iPad, and Firefox behavior has not been tested. Browser and OS codec support varies.
-- Unknown extras schemes, DRM, provider errors, missing playable keys, and external browser-side stream redirects fall back to artwork with diagnostics. Plexplore deliberately does not forward your token to a third-party URL returned by Plex. Some online extras may therefore fail until the PMS server-mediated path is validated against your version.
+- Unknown extras schemes, DRM, provider errors, missing playable keys, and external browser-side stream redirects fall back to artwork with diagnostics. Trafirdis deliberately does not forward your token to a third-party URL returned by Plex. Some online extras may therefore fail until the PMS server-mediated path is validated against your version.
 - Older `extraType=1` records and `plex://` extra keys are isolated compatibility cases, not universal API guarantees. The client uses standard PMS library paths; alternate providers using different feature paths are outside the MVP.
 - Deep links follow the researched Python PlexAPI format; navigation in your installed Plex Web version still needs verification.
 - Libraries are filtered in browser memory. Extremely large collections may benefit from server-side filtering or virtualization later. Movies without artwork, genres, ratings, year, or runtime remain browsable; absent values do not satisfy numeric filters.
@@ -219,6 +249,6 @@ src/App.tsx       Connection/session boundary
 public/sample/    Original local sample illustrations
 ```
 
-All UI, source comments, errors, configuration, and documentation are in English. The original supplied specification is retained at `docs/PRD.md`; the product brand is **Plexplore**.
+All UI, source comments, errors, configuration, and documentation are in English. The MVP requirements are retained in `docs/PRD.md`, with product naming updated to **Trafirdis**. Future work affecting identity, integrations or distribution must consult `docs/COMPLIANCE.md`.
 
-The Docker test suite requires a built `plexplore:local` image, the `node:22-alpine` fixture image, and the same Playwright Chromium installation used by the browser suite. It creates and removes an isolated Docker network and test containers, uses only synthetic Plex responses/media, and checks runtime configuration, non-root/read-only operation, authentication, redirects, range/stream delivery, browser playback, offline Plex behavior, and credential-free logs. Set `PLEXPLORE_TEST_IMAGE` to test another image tag. Builds behind a TLS inspection proxy may use the optional BuildKit secret `--secret id=proxy_ca,src=/path/to/trusted-proxy-ca.pem`; that CA is mounted only during dependency installation and is not copied into the image.
+The Docker test suite requires a built `trafirdis:local` image, the `node:22-alpine` fixture image, and the same Playwright Chromium installation used by the browser suite. It creates and removes an isolated Docker network and test containers, uses only synthetic Plex responses/media, and checks runtime configuration, non-root/read-only operation, authentication, redirects, range/stream delivery, browser playback, offline Plex behavior, and credential-free logs. Set `TRAFIRDIS_TEST_IMAGE` to test another image tag. Builds behind a TLS inspection proxy may use the optional BuildKit secret `--secret id=proxy_ca,src=/path/to/trusted-proxy-ca.pem`; that CA is mounted only during dependency installation and is not copied into the image.

@@ -82,8 +82,8 @@ export function usePlexSignIn(onConnect: (token: string) => void) {
     try {
       // A round-trip must be resumable before opening Plex's hosted sign-in.
       try {
-        sessionStorage.setItem("plexplore.storage-check", "1");
-        sessionStorage.removeItem("plexplore.storage-check");
+        sessionStorage.setItem("trafirdis.storage-check", "1");
+        sessionStorage.removeItem("trafirdis.storage-check");
       } catch {
         throw new Error("storage");
       }
@@ -99,7 +99,7 @@ export function usePlexSignIn(onConnect: (token: string) => void) {
         window.location.pathname,
         window.location.origin,
       );
-      callback.searchParams.set("plexplore_auth", state);
+      callback.searchParams.set("trafirdis_auth", state);
       savePendingSignIn({ ...pin, state, clientId });
       window.location.assign(signInUrl(pin, clientId, callback.href));
     } catch (error) {

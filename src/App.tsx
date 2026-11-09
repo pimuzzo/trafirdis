@@ -5,7 +5,7 @@ import { ConnectionScreen } from "./components/ConnectionScreen";
 import Catalog from "./components/Catalog";
 function readToken() {
   try {
-    return sessionStorage.getItem("plexplore.token") || "";
+    return sessionStorage.getItem("trafirdis.token") || "";
   } catch {
     return "";
   }
@@ -19,7 +19,7 @@ export default function App() {
     setToken("");
     setSample(false);
     try {
-      sessionStorage.removeItem("plexplore.token");
+      sessionStorage.removeItem("trafirdis.token");
     } catch {
       /* The in-memory session still disconnects. */
     }
@@ -29,7 +29,7 @@ export default function App() {
     (value: string) => {
       queries.clear();
       try {
-        sessionStorage.setItem("plexplore.token", value);
+        sessionStorage.setItem("trafirdis.token", value);
       } catch {
         /* In-memory use remains available when storage is blocked. */
       }

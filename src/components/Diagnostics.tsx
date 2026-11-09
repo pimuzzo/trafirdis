@@ -98,7 +98,7 @@ export default function Diagnostics({
       );
       const link = document.createElement("a");
       link.href = url;
-      link.download = "plexplore-trailer-report.json";
+      link.download = "trafirdis-trailer-report.json";
       document.body.append(link);
       link.click();
       link.remove();

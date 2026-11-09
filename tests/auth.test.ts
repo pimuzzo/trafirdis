@@ -67,16 +67,16 @@ describe("Plex hosted sign-in", () => {
       signInUrl(
         { ...pin, code: "code&forwardUrl=https://outside.example" },
         "device-id",
-        "http://localhost:8080/?plexplore_auth=nonce",
+        "http://localhost:8080/?trafirdis_auth=nonce",
       ),
     );
     expect(url.origin).toBe("https://app.plex.tv");
     const params = new URLSearchParams(url.hash.slice(2));
     expect(params.get("forwardUrl")).toBe(
-      "http://localhost:8080/?plexplore_auth=nonce",
+      "http://localhost:8080/?trafirdis_auth=nonce",
     );
     expect(params.get("code")).toBe("code&forwardUrl=https://outside.example");
-    expect(params.get("context[device][product]")).toBe("Plexplore");
+    expect(params.get("context[device][product]")).toBe("Trafirdis");
     expect(() => signInUrl(pin, "id", "javascript:alert(1)")).toThrow(
       PlexSignInError,
     );
@@ -231,7 +231,7 @@ describe("Plex hosted sign-in", () => {
       clientId: getClientIdentifier(),
     };
     savePendingSignIn(pending);
-    history.replaceState(null, "", "/?plexplore_auth=random-nonce");
+    history.replaceState(null, "", "/?trafirdis_auth=random-nonce");
     expect(readSignInReturn()).toEqual(pending);
     clearSignInReturn();
     expect(sessionStorage.getItem(pendingSignInKey)).toBeNull();
@@ -244,9 +244,9 @@ describe("Plex hosted sign-in", () => {
       state: "correct",
       clientId: getClientIdentifier(),
     });
-    history.replaceState(null, "", "/?plexplore_auth=forged");
+    history.replaceState(null, "", "/?trafirdis_auth=forged");
     expect(() => readSignInReturn()).toThrow(/could not be verified/);
     expect(sessionStorage.getItem(pendingSignInKey)).toBeNull();
-    expect(sessionStorage.getItem("plexplore.token")).toBeNull();
+    expect(sessionStorage.getItem("trafirdis.token")).toBeNull();
   });
 });
