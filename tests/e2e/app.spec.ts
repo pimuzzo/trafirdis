@@ -1,5 +1,11 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+test.beforeEach(async ({ page }) => {
+  // Keep existing playback fixtures deterministic; random selection has its own case.
+  await page.addInitScript(() => {
+    Math.random = () => 0;
+  });
+});
 const films = [
   {
     ratingKey: "1",
@@ -49,6 +55,7 @@ async function mockPlex(
     noLibraries?: boolean;
     trailer?: "direct" | "hls" | "missing" | "broken" | "external";
     delayed?: boolean;
+    libraries?: { key: string; title: string }[];
   } = {},
 ) {
   const requests: { path: string; method: string; token?: string }[] = [];
@@ -74,9 +81,11 @@ async function mockPlex(
       return fulfill(route, {
         Directory: options.noLibraries
           ? []
-          : [{ key: "1", title: "Movies", type: "movie" }],
+          : (options.libraries || [{ key: "1", title: "Movies" }]).map(
+              (library) => ({ ...library, type: "movie" }),
+            ),
       });
-    if (path === "/library/sections/1/all")
+    if (/^\/library\/sections\/[12]\/all$/.test(path))
       return fulfill(route, {
         totalSize: options.empty ? 0 : films.length,
         Metadata: options.empty ? [] : films,
@@ -157,8 +166,12 @@ async function mockPlex(
   });
   return requests;
 }
-async function connect(page: Page) {
+async function connect(page: Page, random?: number) {
   await page.goto("/");
+  if (random !== undefined)
+    await page.evaluate((value) => {
+      Math.random = () => value;
+    }, random);
   await page.mouse.move(0, 0);
   await page.getByText("Use a Plex token instead", { exact: true }).click();
   await page.getByLabel("Plex authentication token").fill("fixture-token");
@@ -287,7 +300,7 @@ test("welcome and sample catalog are polished, usable, and entirely local", asyn
   await expect(page.getByLabel("Search movies")).toBeFocused();
   await page.keyboard.type("Paper Moons");
   await expect(
-    page.getByRole("heading", { name: "Paper Moons", exact: true, level: 1 }),
+    page.locator(".movie-grid [data-movie]").filter({ hasText: "Paper Moons" }),
   ).toBeVisible();
   await expect(page.locator(".movie-grid [data-movie]")).toHaveCount(1);
   await page.getByLabel("Search movies").fill("no such title");
@@ -309,10 +322,13 @@ test("combines filters without additional Plex requests and supports keyboard na
   await cards.first().focus();
   await page.keyboard.press("ArrowRight");
   await expect(cards.nth(1)).toBeFocused();
-  await expect(
-    page.getByRole("heading", { name: "Second Chance", exact: true }),
-  ).toBeVisible();
+  await expect(page.locator(".hero h1")).toHaveText("First Light");
   await page.keyboard.press("Enter");
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("heading", { name: "Second Chance", exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(cards.nth(1)).toBeFocused();
@@ -402,7 +418,7 @@ test("mute controls match the video after pause, settings and tab visibility res
   });
   await unmute();
 });
-test("rapid selection cancels pending previews and only loads the final selected film", async ({
+test("poster focus does not replace the random featured movie or its preview", async ({
   page,
 }) => {
   const requests = await mockPlex(page, { trailer: "direct" });
@@ -428,12 +444,12 @@ test("rapid selection cancels pending previews and only loads the final selected
     requests
       .filter((r) => /^\/library\/metadata\//.test(r.path))
       .map((r) => r.path),
-  ).toEqual(["/library/metadata/3"]);
+  ).toEqual(["/library/metadata/1"]);
   expect(
     requests
       .filter((r) => r.path.startsWith("/library/parts/"))
       .map((r) => r.path),
-  ).toEqual(["/library/parts/3/trailer.webm"]);
+  ).toEqual(["/library/parts/1/trailer.webm"]);
 });
 test("plays Plex HLS through the lazy fallback in Chromium", async ({
   page,
@@ -482,7 +498,7 @@ test("failed direct and HLS streams fall back to artwork", async ({ page }) => {
   await expect(page.locator(".hero-background img")).toBeVisible();
   await page.getByLabel("Search movies").fill("Third");
   await expect(
-    page.getByRole("heading", { name: "Third Shore", exact: true }),
+    page.locator(".movie-grid [data-movie]").filter({ hasText: "Third Shore" }),
   ).toBeVisible();
 });
 test("does not send a token to external HLS playlist resources", async ({
@@ -943,4 +959,100 @@ test.describe("tablet category navigation", () => {
     await dialog.locator(".dialog-close").click();
     await expect(dialog).toHaveCount(0);
   });
+});
+
+test("movie library survives reload and falls back when the saved section is no longer accessible", async ({
+  page,
+}) => {
+  const options = {
+    trailer: "missing" as const,
+    libraries: [
+      { key: "1", title: "Movies" },
+      { key: "2", title: "Archive" },
+    ],
+  };
+  const requests = await mockPlex(page, options);
+  await connect(page);
+  await page.getByLabel("Movie library", { exact: true }).selectOption("2");
+  await expect
+    .poll(() =>
+      requests.some((request) => request.path === "/library/sections/2/all"),
+    )
+    .toBe(true);
+  requests.length = 0;
+  await page.reload();
+  await expect(page.getByLabel("Movie library", { exact: true })).toHaveValue(
+    "2",
+  );
+  await expect
+    .poll(() =>
+      requests.some((request) => request.path === "/library/sections/2/all"),
+    )
+    .toBe(true);
+  expect(
+    requests.some((request) => request.path === "/library/sections/1/all"),
+  ).toBe(false);
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("trafirdis.library.test-machine"),
+    ),
+  ).toBe("2");
+  options.libraries = [{ key: "1", title: "Movies" }];
+  requests.length = 0;
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "First Light", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Movie library", { exact: true })).toHaveCount(
+    0,
+  );
+  expect(
+    requests.some((request) => request.path === "/library/sections/2/all"),
+  ).toBe(false);
+});
+
+test("hero is randomly chosen and stays stable through hover, filters and details navigation", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "missing" });
+  await connect(page, 0.99);
+  const hero = page.locator(".hero");
+  await expect(
+    hero.getByRole("heading", { name: "Third Shore", exact: true }),
+  ).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(
+    navigation.getByRole("button", { name: "My library", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    navigation.getByRole("button", { name: "Discover", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("region", { name: "Drama", exact: true })
+    .locator('[data-movie="2"]')
+    .hover();
+  await expect(hero.locator("h1")).toHaveText("Third Shore");
+  await page.getByLabel("Search movies").fill("First Light");
+  await expect(page.locator(".movie-grid [data-movie]")).toHaveCount(1);
+  await expect(hero.locator("h1")).toHaveText("Third Shore");
+  // The featured film can be outside the current filtered results.
+  await hero.getByRole("button", { name: "More info" }).click();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("heading", { name: "Third Shore", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Previous movie" })
+    .click();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("heading", { name: "Second Chance", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(hero.locator("h1")).toHaveText("Third Shore");
+  await page.reload();
+  await expect(hero.locator("h1")).toHaveText("First Light");
 });

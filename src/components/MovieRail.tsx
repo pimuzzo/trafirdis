@@ -53,7 +53,6 @@ export function MovieCard({
       className={`movie-card ${selected ? "selected" : ""}`}
       data-movie={movie.id}
       aria-label={`${movie.title}${movie.year ? `, ${movie.year}` : ""}. Show details`}
-      onMouseEnter={() => onSelect(movie)}
       onFocus={() => onSelect(movie)}
       onClick={() => {
         onSelect(movie);

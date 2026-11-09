@@ -20,6 +20,8 @@ import { Hero } from "./Hero";
 import { PreviewDock } from "./PreviewDock";
 import { TrailerService } from "../trailer/service";
 import { Preview } from "./Preview";
+import { useMovieLibrary } from "../hooks/useMovieLibrary";
+import { useFeaturedMovie } from "../hooks/useFeaturedMovie";
 const Diagnostics = diagnosticsEnabled
   ? lazy(() => import("./Diagnostics"))
   : null;
@@ -56,7 +58,6 @@ export default function Catalog({
     document.addEventListener("keydown", shortcut);
     return () => document.removeEventListener("keydown", shortcut);
   }, []);
-  const [library, setLibrary] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState("");
@@ -64,7 +65,6 @@ export default function Catalog({
     null,
   );
   const [settings, setSettings] = useState(false);
-  const [view, setView] = useState<"discover" | "library">("discover");
   const [gridLimit, setGridLimit] = useState(40);
   const server = useQuery({
     queryKey: ["server"],
@@ -76,7 +76,13 @@ export default function Catalog({
     queryFn: ({ signal }) => client!.libraries(signal),
     enabled: !sample,
   });
-  const libraryId = library || libraries.data?.[0]?.id;
+  const serverKey = server.data
+    ? server.data.machineIdentifier || serverLabel
+    : undefined;
+  const { libraryId, selectLibrary } = useMovieLibrary(
+    serverKey,
+    libraries.data,
+  );
   const catalog = useQuery({
     queryKey: ["movies", libraryId],
     queryFn: ({ signal }) => client!.movies(libraryId!, signal),
@@ -87,8 +93,12 @@ export default function Catalog({
     () => filterMovies(movies, filters),
     [movies, filters],
   );
-  const active = visible.find((m) => m.id === selected) || visible[0];
-  const hasMovie = Boolean(active);
+  const active = visible.find((m) => m.id === selected);
+  const { movie: featured, selectFeatured } = useFeaturedMovie(
+    movies,
+    sample ? "sample" : `${serverKey || ""}:${libraryId || ""}`,
+  );
+  const hasMovie = Boolean(featured);
   useEffect(() => {
     const element = heroHost.current;
     if (!element) return;
@@ -123,7 +133,9 @@ export default function Catalog({
   const error = server.error || libraries.error || catalog.error;
   const loading =
     !sample &&
-    (libraries.isPending || (Boolean(libraryId) && catalog.isPending));
+    (server.isPending ||
+      libraries.isPending ||
+      (Boolean(libraryId) && catalog.isPending));
   const activeFilters = Object.entries(filters).filter(([, v]) =>
     Boolean(v),
   ).length;
@@ -137,14 +149,13 @@ export default function Catalog({
         ? "Search results"
         : activeFilters > 0
           ? "Filtered movies"
-          : "My library",
+          : "Movie library",
       movies: visible,
     };
+    const index = rail.movies.findIndex((item) => item.id === movie.id);
+    if (index < 0) return;
     setSelected(movie.id);
-    setDetails({
-      rail,
-      index: rail.movies.findIndex((item) => item.id === movie.id),
-    });
+    setDetails({ rail, index });
   };
   const refresh = () => {
     trailers?.clear();
@@ -164,7 +175,6 @@ export default function Catalog({
           aria-label="Trafirdis home"
           onClick={(e) => {
             e.preventDefault();
-            setView("discover");
             setFilters(emptyFilters);
             window.scrollTo({ top: 0, behavior: "instant" });
           }}
@@ -173,26 +183,12 @@ export default function Catalog({
         </a>
         <nav aria-label="Main navigation">
           <button
-            className={
-              view === "discover" && !filters.watched
-                ? "nav-link active"
-                : "nav-link"
-            }
+            className={!filters.watched ? "nav-link active" : "nav-link"}
             onClick={() => {
-              setView("discover");
               setFilters(emptyFilters);
             }}
           >
             Discover
-          </button>
-          <button
-            className={view === "library" ? "nav-link active" : "nav-link"}
-            onClick={() => {
-              setView("library");
-              document.getElementById("catalog")?.scrollIntoView();
-            }}
-          >
-            My library
           </button>
           <button
             className={
@@ -208,17 +204,20 @@ export default function Catalog({
         </nav>
         <div className="header-actions">
           <label className="search">
-            <Icon name="search" size={18} />
-            <input
-              type="search"
-              placeholder="Find a film..."
-              aria-label="Search movies"
-              value={filters.search}
-              onChange={(e) => {
-                setFilters({ ...filters, search: e.target.value });
-              }}
-            />
-            <kbd>/</kbd>
+            <span className="search-field">
+              <Icon name="search" size={18} />
+              <input
+                type="search"
+                placeholder="Find a film..."
+                aria-label="Search movies"
+                aria-keyshortcuts="/"
+                value={filters.search}
+                onChange={(e) => {
+                  setFilters({ ...filters, search: e.target.value });
+                }}
+              />
+            </span>
+            <kbd aria-hidden="true">/</kbd>
           </label>
           <button
             className="icon-button"
@@ -241,17 +240,19 @@ export default function Catalog({
           </button>
         </div>
       )}
-      {active && (
+      {featured && (
         <div ref={heroHost}>
           <Hero
-            movie={active}
+            movie={featured}
             client={client}
             trailers={trailers}
             connectedServer={connectedServer}
-            total={visible.length}
+            total={movies.length}
             previewVisible={!details && !dockMovie}
             previewEnabled={!settings && !diagnostics}
-            onDetails={showDetails}
+            onDetails={(movie) =>
+              showDetails(movie, { title: "Movie library", movies })
+            }
           />
         </div>
       )}
@@ -264,9 +265,7 @@ export default function Catalog({
             <h2>
               {filters.search
                 ? "Your search results"
-                : view === "library"
-                  ? "Your film collection"
-                  : "Find your next great watch"}
+                : "Find your next great watch"}
               <span className="catalog-count">{visible.length} films</span>
             </h2>
           </div>
@@ -276,7 +275,8 @@ export default function Catalog({
                 aria-label="Movie library"
                 value={libraryId}
                 onChange={(e) => {
-                  setLibrary(e.target.value);
+                  selectLibrary(e.target.value);
+                  setGridLimit(40);
                   setSelected("");
                   setFilters(emptyFilters);
                 }}
@@ -377,7 +377,7 @@ export default function Catalog({
               )}
             </div>
           )}
-        {view === "library" || activeFilters > 0 ? (
+        {activeFilters > 0 ? (
           <>
             <div className="movie-grid" data-rail aria-label="Movie results">
               {visible.slice(0, gridLimit).map((m) => (
@@ -465,12 +465,12 @@ export default function Catalog({
         >
           <Diagnostics
             movies={movies}
-            selectedId={active?.id}
+            selectedId={active?.id || featured?.id}
             service={trailers}
             onClose={() => setDiagnostics(false)}
             onTest={(movie) => {
               setFilters(emptyFilters);
-              setView("discover");
+              selectFeatured(movie.id);
               setSelected(movie.id);
               setDetails(null);
               setDiagnostics(false);

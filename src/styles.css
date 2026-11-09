@@ -418,14 +418,28 @@ input::placeholder {
 .search {
   display: flex;
   align-items: center;
+  gap: 14px;
   color: #8d919a;
   position: relative;
+}
+.search-field {
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+  border-radius: 5px;
+}
+.search-field:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.search input:focus-visible {
+  outline: none;
 }
 .search input {
   width: 175px;
   border: 0;
   background: transparent;
-  padding: 12px 25px 12px 11px;
+  padding: 12px 12px 12px 11px;
   font-size: 11px;
 }
 .search kbd {
