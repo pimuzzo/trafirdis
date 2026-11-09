@@ -778,3 +778,169 @@ test("lower rails keep the selected preview visible with only one video element"
     await page.locator("video").evaluate((video) => video.hasAttribute("src")),
   ).toBe(false);
 });
+
+test("details navigation stays in the opening category and restores focus and page position", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "missing" });
+  await connect(page);
+  const opener = page
+    .getByRole("region", { name: "Drama", exact: true })
+    .locator('[data-movie="2"]');
+  await opener.scrollIntoViewIfNeeded();
+  await opener.focus();
+  const position = await page.evaluate(() => scrollY);
+  await opener.click();
+  const dialog = page.locator(".details-dialog");
+  await expect(dialog.locator(".details-context")).toContainText("Drama");
+  await expect(dialog.getByRole("status")).toContainText("2 of 2");
+  await expect(
+    dialog.getByRole("button", { name: "Next movie" }),
+  ).toBeDisabled();
+  await dialog.getByRole("button", { name: "Previous movie" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "First Light", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Previous movie" }),
+  ).toBeDisabled();
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    dialog.getByRole("heading", { name: "Second Chance", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("ArrowRight");
+  await expect(dialog.getByRole("status")).toContainText("2 of 2");
+  await page.keyboard.press("Escape");
+  await expect(opener).toBeFocused();
+  expect(await page.evaluate(() => scrollY)).toBe(position);
+});
+
+test("filtered results define the dialog sequence and a single result disables both directions", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "missing" });
+  await connect(page);
+  await page.getByLabel("Search movies").fill("Second");
+  await page.locator(".movie-grid [data-movie]").click();
+  const dialog = page.locator(".details-dialog");
+  await expect(dialog.locator(".details-context")).toContainText(
+    "Search results",
+  );
+  await expect(dialog.getByRole("status")).toContainText("1 of 1");
+  await expect(
+    dialog.getByRole("button", { name: "Previous movie" }),
+  ).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", { name: "Next movie" }),
+  ).toBeDisabled();
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    dialog.getByRole("heading", { name: "Second Chance", exact: true }),
+  ).toBeVisible();
+  await dialog.locator(".dialog-close").click();
+  await expect(page.getByLabel("Search movies")).toHaveValue("Second");
+  await expect(page.locator(".movie-grid [data-movie]")).toHaveCount(1);
+});
+
+test("rapid dialog navigation cancels intermediate previews and keeps one player", async ({
+  page,
+}) => {
+  const requests = await mockPlex(page, { trailer: "direct", delayed: true });
+  await connect(page);
+  await page
+    .getByRole("region", { name: "Recently Added", exact: true })
+    .locator('[data-movie="1"]')
+    .click();
+  const dialog = page.locator(".details-dialog");
+  const start = requests.length;
+  await dialog.getByRole("button", { name: "Next movie" }).click();
+  await dialog.getByRole("button", { name: "Next movie" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "Third Shore", exact: true }),
+  ).toBeVisible();
+  await expect(dialog.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+    { timeout: 10000 },
+  );
+  await expect(page.locator("video")).toHaveCount(1);
+  expect(
+    requests
+      .slice(start)
+      .filter((r) => r.path.startsWith("/library/parts/"))
+      .map((r) => r.path),
+  ).toEqual(["/library/parts/3/trailer.webm"]);
+  expect(await dialog.locator("video").evaluate((video) => video.muted)).toBe(
+    true,
+  );
+  await dialog.locator(".dialog-close").click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test.describe("tablet category navigation", () => {
+  test.use({ viewport: { width: 820, height: 1180 }, hasTouch: true });
+  test("swipes details without hijacking vertical scrolling or the trailer surface", async ({
+    page,
+  }) => {
+    await mockPlex(page, { trailer: "missing" });
+    await connect(page);
+    await page
+      .getByRole("region", { name: "Drama", exact: true })
+      .locator('[data-movie="2"]')
+      .click();
+    const dialog = page.locator(".details-dialog");
+    const gesture = async (selector: string, dx: number, dy: number) => {
+      await dialog.locator(selector).evaluate(
+        (element, { dx, dy }) => {
+          const touch = (x: number, y: number) =>
+            new Touch({
+              identifier: 1,
+              target: element,
+              clientX: x,
+              clientY: y,
+            });
+          element.dispatchEvent(
+            new TouchEvent("touchstart", {
+              bubbles: true,
+              touches: [touch(150, 500)],
+            }),
+          );
+          element.dispatchEvent(
+            new TouchEvent("touchend", {
+              bubbles: true,
+              changedTouches: [touch(150 + dx, 500 + dy)],
+            }),
+          );
+        },
+        { dx, dy },
+      );
+    };
+    await gesture(".details-visual", 100, 0);
+    await expect(dialog.getByRole("status")).toContainText("2 of 2");
+    await gesture(".details-copy", 20, 120);
+    await expect(dialog.getByRole("status")).toContainText("2 of 2");
+    await gesture(".details-copy", 110, 5);
+    await expect(
+      dialog.getByRole("heading", { name: "First Light", exact: true }),
+    ).toBeVisible();
+    await expect(dialog.getByRole("status")).toContainText("1 of 2");
+    await gesture(".details-copy", -110, 5);
+    await expect(
+      dialog.getByRole("heading", { name: "Second Chance", exact: true }),
+    ).toBeVisible();
+    const next = await dialog
+      .getByRole("button", { name: "Next movie" })
+      .boundingBox();
+    expect(next?.width).toBeGreaterThanOrEqual(44);
+    expect(next?.height).toBeGreaterThanOrEqual(44);
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({ path: "work/category-navigation-tablet.png" });
+    await dialog.locator(".dialog-close").click();
+    await expect(dialog).toHaveCount(0);
+  });
+});

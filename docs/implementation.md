@@ -33,3 +33,9 @@ After the MVP merge, added runtime opt-in diagnostics for Docker and production 
 Diagnostics can search the loaded library, inspect at most eight fresh metadata records sequentially, cancel pending work, and test a title outside catalog filters. Missing metadata, request failures, unavailable resources, autoplay denial and playback failures remain distinct. Rechecks and new preview attempts clear stale success; pausing preserves genuine observations. Downloaded reports use an explicit allowlist of numeric IDs, states and fixed error codes, excluding titles, credentials, addresses and raw error text. No additional provider, database, dependency or server write was introduced.
 
 The maintainer has confirmed browsing and previews on the real server with Chrome/Docker. Automated tests continue to use synthetic local Plex responses; full provider/codec, session-cleanup and deep-link acceptance remains pending. GitHub Actions runs the expanded unit, browser and Docker suites for this follow-up.
+
+## Category navigation follow-up
+
+The existing movie-details popup now supports previous/next navigation within the opening category, with a position counter, keyboard arrows and horizontal touch swipes outside the player and controls. The opening list is captured so navigation keeps its order and active filters; category ends do not wrap. The original popup restores focus and page position on close. Movie changes reuse the existing preview lifecycle, cancel obsolete work and retain its muted autoplay behavior.
+
+This change extends the existing details popup. The home hero, floating preview, playback/audio policy and Plex API behavior are preserved. Adjacent metadata/video preloading and a broader mobile layout redesign are deferred. No dependencies, backend services or new Plex operations were added.

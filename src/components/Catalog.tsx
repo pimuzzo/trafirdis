@@ -8,6 +8,7 @@ import {
   groupMovies,
   type Movie,
   type Server,
+  type Rail,
 } from "../domain/movie";
 import { sampleMovies } from "../sample";
 import { Brand, Icon } from "./Icon";
@@ -59,7 +60,9 @@ export default function Catalog({
   const [filters, setFilters] = useState(emptyFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState("");
-  const [details, setDetails] = useState<Movie | null>(null);
+  const [details, setDetails] = useState<{ rail: Rail; index: number } | null>(
+    null,
+  );
   const [settings, setSettings] = useState(false);
   const [view, setView] = useState<"discover" | "library">("discover");
   const [gridLimit, setGridLimit] = useState(40);
@@ -128,9 +131,20 @@ export default function Catalog({
     setSelected(movie.id);
     setDockDismissed(false);
   };
-  const showDetails = (movie: Movie) => {
+  const showDetails = (movie: Movie, source?: Rail) => {
+    const rail = source || {
+      title: filters.search
+        ? "Search results"
+        : activeFilters > 0
+          ? "Filtered movies"
+          : "My library",
+      movies: visible,
+    };
     setSelected(movie.id);
-    setDetails(movie);
+    setDetails({
+      rail,
+      index: rail.movies.findIndex((item) => item.id === movie.id),
+    });
   };
   const refresh = () => {
     trailers?.clear();
@@ -394,7 +408,7 @@ export default function Catalog({
               client={client}
               selected={active?.id}
               onSelect={select}
-              onDetails={showDetails}
+              onDetails={(movie) => showDetails(movie, rail)}
             />
           ))
         )}
@@ -422,15 +436,23 @@ export default function Catalog({
       )}
       {details && (
         <MovieDetails
-          movie={details}
+          movie={details.rail.movies[details.index]}
+          rail={details.rail}
+          index={details.index}
+          onNavigate={(index) => {
+            if (index >= 0 && index < details.rail.movies.length) {
+              setSelected(details.rail.movies[index].id);
+              setDetails({ ...details, index });
+            }
+          }}
           client={client}
           server={connectedServer}
           onClose={() => setDetails(null)}
           preview={
             <Preview
-              key={details.id}
+              key={details.rail.movies[details.index].id}
               service={trailers}
-              movieId={details.id}
+              movieId={details.rail.movies[details.index].id}
               enabled={!settings && !diagnostics}
               compact
             />
