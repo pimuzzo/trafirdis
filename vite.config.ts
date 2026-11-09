@@ -36,8 +36,7 @@ function privateMediaAuth(): Plugin {
 }
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const diagnostics =
-    env.TRAFIRDIS_DIAGNOSTICS || env.PLEXPLORE_DIAGNOSTICS || "false";
+  const diagnostics = env.TRAFIRDIS_DIAGNOSTICS || "false";
   if (!["true", "false"].includes(diagnostics))
     throw new Error("TRAFIRDIS_DIAGNOSTICS must be true or false.");
   const target = env.PLEX_SERVER_URL || "http://192.168.178.46:32400";

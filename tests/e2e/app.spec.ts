@@ -187,7 +187,6 @@ test("Trafirdis identity, favicon and privacy notice are available without exter
   await expect(
     page.getByRole("link", { name: "Privacy notice" }),
   ).toHaveAttribute("href", "/privacy.html");
-  await expect(page.locator("body")).not.toContainText(/plexplore/i);
   await expect
     .poll(() =>
       page
@@ -208,7 +207,7 @@ test("Trafirdis identity, favicon and privacy notice are available without exter
   expect(await privacy.text()).toContain("Privacy notice · Trafirdis");
   expect(external).toEqual([]);
 });
-test("rebranding reuses an existing browser token and authorized device identifier", async ({
+test("Trafirdis reuses its browser session and keeps the device identity on disconnect", async ({
   page,
 }) => {
   const identityHeaders: Record<string, string>[] = [];
@@ -219,8 +218,8 @@ test("rebranding reuses an existing browser token and authorized device identifi
       identityHeaders.push(request.headers());
   });
   await page.addInitScript(() => {
-    sessionStorage.setItem("plexplore.token", "existing-session-token");
-    localStorage.setItem("plexplore.client-id", "existing-device-identifier");
+    sessionStorage.setItem("trafirdis.token", "existing-session-token");
+    localStorage.setItem("trafirdis.client-id", "existing-device-identifier");
   });
   await page.goto("/");
   await expect(
@@ -243,10 +242,10 @@ test("rebranding reuses an existing browser token and authorized device identifi
     .getByRole("button", { name: "Disconnect and clear session" })
     .click();
   expect(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
   ).toBeNull();
   expect(
-    await page.evaluate(() => localStorage.getItem("plexplore.client-id")),
+    await page.evaluate(() => localStorage.getItem("trafirdis.client-id")),
   ).toBe("existing-device-identifier");
 });
 test("welcome and sample catalog are polished, usable, and entirely local", async ({
@@ -699,7 +698,7 @@ test("invalid tokens are recoverable and disconnect clears session storage", asy
     page.getByRole("button", { name: "Sign in with Plex", exact: true }),
   ).toBeVisible();
   expect(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
   ).toBeNull();
 });
 test("handles a missing or empty movie library", async ({ page }) => {

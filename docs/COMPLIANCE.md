@@ -39,7 +39,7 @@ These are Trafirdis design decisions; do not describe them as mandated by Plex u
 - Prefer documented APIs. Isolate undocumented behavior and record evidence and uncertainty in [API research](plex-api.md). Documentation alone does not settle every authorization question.
 - Keep Plex as the source of truth. The application reads catalog data, requests authorized previews and makes scoped session-cleanup calls; it does not edit library metadata or watch history.
 - Keep access tokens out of source control and logs. Use the configured server proxy, reject external media redirects and avoid sending credentials to unrelated services.
-- Keep the account token transient during Plex resource lookup. Store the verified server token only in the browser session, with an in-memory fallback for manual access. Preserve the public client identifier and existing authorization state during branding changes.
+- Keep the account token transient during Plex resource lookup. Store the verified server token only in the browser session, with an in-memory fallback for manual access. Keep the public client identifier stable within the application namespace. If an upgrade changes that namespace, document the new sign-in and device identity, and never silently revoke prior authorizations.
 - Retain the privacy notice when behavior changes. It explains browser storage, first-party Plex requests, native-media query credentials, deployment logs and local diagnostic downloads. There is no app telemetry or automatic report upload.
 - Preserve dependency notices and check distribution licenses. The runtime image packages Trafirdis and Nginx, not Plex Media Server or anyone's library.
 

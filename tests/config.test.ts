@@ -1,22 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-describe("rebrand configuration compatibility", () => {
+describe("Trafirdis runtime configuration", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.stubEnv("DEV", false);
     delete window.__TRAFIRDIS_CONFIG__;
-    delete window.__PLEXPLORE_CONFIG__;
   });
   afterEach(() => {
     delete window.__TRAFIRDIS_CONFIG__;
-    delete window.__PLEXPLORE_CONFIG__;
     vi.unstubAllEnvs();
   });
-  it("prefers the new runtime settings, including an explicit false", async () => {
-    window.__PLEXPLORE_CONFIG__ = {
-      serverUrl: "http://legacy.invalid:32400",
-      diagnostics: true,
-    };
+  it("uses runtime settings, including an explicit false", async () => {
     window.__TRAFIRDIS_CONFIG__ = {
       serverUrl: "http://current.invalid:32400",
       diagnostics: false,
@@ -25,13 +19,13 @@ describe("rebrand configuration compatibility", () => {
     expect(config.serverLabel).toBe("http://current.invalid:32400");
     expect(config.diagnosticsEnabled).toBe(false);
   });
-  it("accepts the public runtime contract used by existing installations", async () => {
-    window.__PLEXPLORE_CONFIG__ = {
-      serverUrl: "http://legacy.invalid:32400",
+  it("enables diagnostics through the public runtime configuration", async () => {
+    window.__TRAFIRDIS_CONFIG__ = {
+      serverUrl: "http://runtime.invalid:32400",
       diagnostics: true,
     };
     const config = await import("../src/config");
-    expect(config.serverLabel).toBe("http://legacy.invalid:32400");
+    expect(config.serverLabel).toBe("http://runtime.invalid:32400");
     expect(config.diagnosticsEnabled).toBe(true);
   });
   it("retains build-time configuration when no runtime override exists", async () => {

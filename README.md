@@ -83,17 +83,25 @@ Docker deployments hide advanced trailer diagnostics by default. Set `TRAFIRDIS_
 
 ## Upgrading an existing installation
 
-The package, image, app metadata, icon and new public configuration use Trafirdis. Rebuild once after updating the checkout:
+The rebrand uses only Trafirdis identifiers, including the Compose service, browser storage, sign-in return parameter and public runtime configuration. Previous application-specific aliases are no longer accepted.
+
+Before updating an existing Docker checkout, stop its stack using the previous Compose file so the old service does not keep the port occupied:
+
+```bash
+docker compose down
+```
+
+Update the checkout and use `TRAFIRDIS_PORT`, `TRAFIRDIS_BIND_IP` and `TRAFIRDIS_DIAGNOSTICS` in your `.env` file. `PLEX_SERVER_URL` and `VITE_SECTION_ORDER` retain their names. Then rebuild and start the Trafirdis service:
 
 ```bash
 docker compose up --build -d
 ```
 
-Existing `.env` files continue working: `PLEXPLORE_PORT`, `PLEXPLORE_BIND_IP` and `PLEXPLORE_DIAGNOSTICS` remain fallback aliases for `TRAFIRDIS_PORT`, `TRAFIRDIS_BIND_IP` and `TRAFIRDIS_DIAGNOSTICS`. Set the new names when changing configuration; an explicitly supplied new setting takes precedence, including `TRAFIRDIS_DIAGNOSTICS=false`. `PLEX_SERVER_URL` and the Plex API/proxy names describe the integration and remain unchanged.
+Keep the current Compose project name when updating. If you move the checkout later, preserve its existing `COMPOSE_PROJECT_NAME` or stop the previous deployment first. These steps do not change Plex library data.
 
-The Compose service key `plexplore` is deliberately retained as a deployment compatibility identifier so the existing service is replaced in place rather than left occupying the port. The image and internal runtime filenames use `trafirdis`. Keep the current Compose project name when updating. Renaming the hosted repository does not rename your local checkout; if you later move that folder, preserve its existing `COMPOSE_PROJECT_NAME` or stop the previous deployment first.
+Finish or cancel pending sign-ins before upgrading, then sign in again afterward. Trafirdis uses browser keys under `trafirdis.*` and the `trafirdis_auth` return-state query parameter; previous browser data is neither imported nor deleted. A new public client identifier is generated for the Trafirdis namespace. Previous authorizations can be revoked separately in Plex account settings.
 
-Browser keys under `plexplore.*`, the `plexplore_auth` return-state query parameter and the public `__PLEXPLORE_CONFIG__` runtime alias remain compatibility contracts. Existing tokens, pending sign-ins and public client identifiers are reused without migration or reset. New runtime scripts expose `__TRAFIRDIS_CONFIG__`; existing runtime configuration remains accepted. `PLEXPLORE_TEST_IMAGE` is also retained as a fallback for the test script's `TRAFIRDIS_TEST_IMAGE` setting. These are legacy identifiers, not displayed product branding. Keep the same browser origin to retain browser-scoped data.
+Custom runtime integrations must supply `window.__TRAFIRDIS_CONFIG__`. Test scripts accept `TRAFIRDIS_TEST_IMAGE` (default `trafirdis:local`).
 
 The intended hosted repository name is `trafirdis`. Repository settings and Git remote URLs are not changed by this rebrand; the maintainer renames the repository separately. Previously downloaded reports and device labels managed by Plex may retain their historical name.
 

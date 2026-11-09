@@ -8,10 +8,7 @@ const suffix = `${process.pid}-${Date.now()}`;
 const network = `trafirdis-test-${suffix}`;
 const app = `trafirdis-app-${suffix}`;
 const fixture = `trafirdis-fixture-${suffix}`;
-const image =
-  process.env.TRAFIRDIS_TEST_IMAGE ||
-  process.env.PLEXPLORE_TEST_IMAGE ||
-  "trafirdis:local";
+const image = process.env.TRAFIRDIS_TEST_IMAGE || "trafirdis:local";
 const names = [];
 let browser;
 function docker(args, allowFailure = false) {
@@ -35,11 +32,7 @@ async function ready(url) {
   }
   throw new Error("Container health check did not become ready.");
 }
-function startApp(
-  name,
-  diagnostics = "false",
-  setting = "TRAFIRDIS_DIAGNOSTICS",
-) {
+function startApp(name, diagnostics = "false") {
   names.push(name);
   docker([
     "run",
@@ -60,7 +53,7 @@ function startApp(
     "--env",
     "PLEX_SERVER_URL=http://plex-fixture:32400",
     "--env",
-    `${setting}=${diagnostics}`,
+    `TRAFIRDIS_DIAGNOSTICS=${diagnostics}`,
     image,
   ]);
   const address = docker(["port", name, "8080/tcp"]).stdout.trim();
@@ -72,9 +65,6 @@ function composeSettings(settings) {
     "TRAFIRDIS_PORT",
     "TRAFIRDIS_BIND_IP",
     "TRAFIRDIS_DIAGNOSTICS",
-    "PLEXPLORE_PORT",
-    "PLEXPLORE_BIND_IP",
-    "PLEXPLORE_DIAGNOSTICS",
   ])
     delete env[name];
   Object.assign(env, settings);
@@ -92,13 +82,9 @@ function composeSettings(settings) {
     ],
     { env, encoding: "utf8", timeout: 60000 },
   );
-  assert.equal(
-    result.status,
-    0,
-    "Compose compatibility configuration must parse.",
-  );
-  const service = JSON.parse(result.stdout).services.plexplore;
-  assert.ok(service, "Keep the existing service identity during the rebrand.");
+  assert.equal(result.status, 0, "Compose configuration must parse.");
+  const service = JSON.parse(result.stdout).services.trafirdis;
+  assert.ok(service, "The Trafirdis service must exist.");
   assert.equal(service.image, "trafirdis:local");
   return {
     port: String(service.ports[0].published),
@@ -107,24 +93,18 @@ function composeSettings(settings) {
   };
 }
 try {
+  assert.deepEqual(composeSettings({}), {
+    port: "8080",
+    host: "127.0.0.1",
+    diagnostics: "false",
+  });
   assert.deepEqual(
     composeSettings({
-      PLEXPLORE_PORT: "8089",
-      PLEXPLORE_BIND_IP: "127.0.0.2",
-      PLEXPLORE_DIAGNOSTICS: "true",
-    }),
-    { port: "8089", host: "127.0.0.2", diagnostics: "true" },
-  );
-  assert.deepEqual(
-    composeSettings({
-      PLEXPLORE_PORT: "8089",
-      PLEXPLORE_BIND_IP: "127.0.0.2",
-      PLEXPLORE_DIAGNOSTICS: "true",
       TRAFIRDIS_PORT: "8090",
       TRAFIRDIS_BIND_IP: "127.0.0.3",
-      TRAFIRDIS_DIAGNOSTICS: "false",
+      TRAFIRDIS_DIAGNOSTICS: "true",
     }),
-    { port: "8090", host: "127.0.0.3", diagnostics: "false" },
+    { port: "8090", host: "127.0.0.3", diagnostics: "true" },
   );
   docker(["image", "inspect", image]);
   docker(["network", "create", network]);
@@ -392,16 +372,16 @@ try {
     .getByRole("heading", { name: "Docker First Light", exact: true })
     .waitFor();
   assert.equal(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
     "docker-server-token",
   );
   assert.equal(
     await page.evaluate(() =>
-      sessionStorage.getItem("plexplore.pending-sign-in"),
+      sessionStorage.getItem("trafirdis.pending-sign-in"),
     ),
     null,
   );
-  assert.equal(new URL(page.url()).searchParams.has("plexplore_auth"), false);
+  assert.equal(new URL(page.url()).searchParams.has("trafirdis_auth"), false);
   assert.ok(
     loginRequests.every(
       (request) =>
@@ -414,18 +394,6 @@ try {
   // The same image enables advanced diagnostics only through runtime configuration.
   const diagnosticApp = `${app}-diagnostics`;
   const diagnosticBase = startApp(diagnosticApp, "true");
-  const legacyApp = `${app}-legacy`;
-  const legacyBase = startApp(legacyApp, "true", "PLEXPLORE_DIAGNOSTICS");
-  await ready(`${legacyBase}/healthz`);
-  const legacyConfig = await (
-    await fetch(`${legacyBase}/runtime-config.js`)
-  ).text();
-  assert.match(legacyConfig, /"diagnostics":true/);
-  assert.match(legacyConfig, /window\.__TRAFIRDIS_CONFIG__/);
-  assert.match(
-    legacyConfig,
-    /window\.__PLEXPLORE_CONFIG__ = window\.__TRAFIRDIS_CONFIG__/,
-  );
   await ready(`${diagnosticBase}/healthz`);
   assert.match(
     await (await fetch(`${diagnosticBase}/runtime-config.js`)).text(),
@@ -578,7 +546,7 @@ try {
   assert.ok(
     [502, 504].includes((await fetch(`${base}/plex/library/sections`)).status),
   );
-  for (const name of [app, diagnosticApp, legacyApp]) {
+  for (const name of [app, diagnosticApp]) {
     const logs = docker(["logs", name]);
     assert.doesNotMatch(
       logs.stdout + logs.stderr,

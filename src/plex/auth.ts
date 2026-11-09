@@ -25,8 +25,8 @@ interface PlexResource {
   provides?: string;
   accessToken?: string;
 }
-// Persisted keys and the return-state query name are compatibility contracts.
-export const pendingSignInKey = "plexplore.pending-sign-in";
+// Scope pending authorization and callback state to Trafirdis.
+export const pendingSignInKey = "trafirdis.pending-sign-in";
 const requestTimeout = 12000;
 
 export class PlexSignInClient {
@@ -257,12 +257,12 @@ export function clearSignInReturn() {
     /* Storage may be blocked. */
   }
   const url = new URL(window.location.href);
-  url.searchParams.delete("plexplore_auth");
+  url.searchParams.delete("trafirdis_auth");
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 export function readSignInReturn(): PendingSignIn | null {
   const state = new URL(window.location.href).searchParams.get(
-    "plexplore_auth",
+    "trafirdis_auth",
   );
   if (!state) return null;
   try {

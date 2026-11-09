@@ -158,14 +158,14 @@ test("Plex sign-in returns to the app and stores only the verified server-specif
     page.getByRole("heading", { name: "Authorized First Light", exact: true }),
   ).toBeVisible({ timeout: 15000 });
   expect(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
   ).toBe("synthetic-server-token");
   expect(
     await page.evaluate(() =>
-      sessionStorage.getItem("plexplore.pending-sign-in"),
+      sessionStorage.getItem("trafirdis.pending-sign-in"),
     ),
   ).toBeNull();
-  expect(new URL(page.url()).searchParams.has("plexplore_auth")).toBe(false);
+  expect(new URL(page.url()).searchParams.has("trafirdis_auth")).toBe(false);
   expect(
     calls
       .filter((c) => new URL(c.url).origin === "http://127.0.0.1:5175")
@@ -186,7 +186,7 @@ test("Plex sign-in returns to the app and stores only the verified server-specif
     ),
   ).toBe(true);
   const client = await page.evaluate(() =>
-    localStorage.getItem("plexplore.client-id"),
+    localStorage.getItem("trafirdis.client-id"),
   );
   expect(client).toBeTruthy();
   expect(calls.every((c) => c.client === client)).toBe(true);
@@ -198,7 +198,7 @@ test("Plex sign-in returns to the app and stores only the verified server-specif
     page.getByRole("button", { name: "Sign in with Plex", exact: true }),
   ).toBeVisible();
   expect(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
   ).toBeNull();
 });
 test("expired authorization stays recoverable without accepting a token", async ({
@@ -211,7 +211,7 @@ test("expired authorization stays recoverable without accepting a token", async 
     .click();
   await expect(page.getByRole("alert")).toContainText("expired");
   expect(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
   ).toBeNull();
   await expect(
     page.getByRole("button", { name: "Sign in with Plex", exact: true }),
@@ -229,7 +229,7 @@ test("account access must match the configured Plex server", async ({
     timeout: 15000,
   });
   expect(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
   ).toBeNull();
 });
 test("cancel stops pending sign-in polling and leaves manual and sample access usable", async ({
@@ -248,7 +248,7 @@ test("cancel stops pending sign-in polling and leaves manual and sample access u
   await page.waitForTimeout(1200);
   expect(calls).toHaveLength(count);
   expect(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
   ).toBeNull();
   await page.getByText("Use a Plex token instead", { exact: true }).click();
   await expect(page.getByLabel("Plex authentication token")).toBeVisible();
@@ -271,9 +271,9 @@ test("forged return state never makes a cloud request or accepts credentials", a
     },
   );
   await page.addInitScript(() => {
-    localStorage.setItem("plexplore.client-id", "device-fixture");
+    localStorage.setItem("trafirdis.client-id", "device-fixture");
     sessionStorage.setItem(
-      "plexplore.pending-sign-in",
+      "trafirdis.pending-sign-in",
       JSON.stringify({
         id: "123",
         code: "strong-pin",
@@ -283,11 +283,11 @@ test("forged return state never makes a cloud request or accepts credentials", a
       }),
     );
   });
-  await page.goto("/?plexplore_auth=forged");
+  await page.goto("/?trafirdis_auth=forged");
   await expect(page.getByRole("alert")).toContainText("could not be verified");
   expect(calls).toBe(0);
   expect(
-    await page.evaluate(() => sessionStorage.getItem("plexplore.token")),
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
   ).toBeNull();
 });
 test("Plex cloud outages do not block sample browsing", async ({ page }) => {
