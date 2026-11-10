@@ -242,6 +242,19 @@ This follow-up applies to the accepted hero and details preview surfaces. It doe
 3. Production Docker integration exercises the same strict decision/start contract and restart sequences. Quality, browser and Docker CI jobs pass.
 4. The maintainer repeats these scenarios on the real Plex server. Synthetic tests validate the client protocol and lifecycle; they cannot establish that every provider/codec combination succeeds on the actual server.
 
+### Retained preview buffers — 2026-11-10
+
+The maintainer found no noticeable improvement from the route-preference experiment in PR #6; it was reverted and closed without merging. Network timings show multi-second waits for HLS segment responses, while decision/start requests complete in milliseconds. The new experiment must avoid rebuilding a recently used stream, rather than only reducing the selection timer. The requirements below supersede per-visibility/per-navigation renegotiation only when an already-approved stream remains open; every new stream still requires a fresh decision.
+
+- A previously playing HLS preview may keep its existing browser element, media buffer and still-open Plex session in memory when it leaves the viewport, closes or changes to another film. It must be paused and muted while inactive, with at most one playing/visible player.
+- Keep at most two inactive previews, for at most 30 seconds after each release. Retain only buffers containing the beginning (at least 0.25 seconds from zero, with no more than 60 buffered seconds). These are entry/time/buffer-duration limits, not a strict byte-memory guarantee. Do not preload other trailers or persist media.
+- Returning to an eligible preview starts at zero on its existing open session, without new decision/start/initial segment requests when the required bytes remain buffered. Cold, unverified, ended, oversized or evicted buffers use the normal delayed discovery and fresh approved HLS path. Do not reuse closed session URLs.
+- On reuse failure, dispose the old playback and rebuild through a fresh Plex decision/session. Existing startup/buffering timeouts and candidate fallbacks remain active; no Plex restriction is bypassed.
+- Expiry, eviction, error, refresh/inspection, background-tab visibility, settings and disconnect release retained sessions with existing scoped best-effort stop calls. Cached media must stay silent and detached from the visible surface. Native HLS buffering remains browser-controlled; hls.js loading is suspended explicitly. Plex may retain a transcoder temporarily until cleanup/expiry.
+- Preserve existing popup/hero audio reset rules and controls. Only real media/playing events establish resolution/playback; retained history must not make a new restart appear successful before it plays.
+
+Acceptance: simulate slow initial segments, play A and B, then deny new media requests. Returning to A and the hero must still play from zero with the same existing element/source and no new HLS startup. Test native HLS and MSE; test 30-second expiry, two-entry eviction, ineligible buffers, teardown, silence and fresh-session fallback after reuse failure. Production Docker must prove the no-rebuild path too. Real Plex latency and session survival remain maintainer acceptance items; a first-start speedup is not claimed.
+
 ### 4.5 Movie Details
 
 Selecting a movie should display:

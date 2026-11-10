@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { errorMessage, PlexError } from "../plex/client";
-import { playAttempt, PlaybackError, releaseVideo } from "../trailer/player";
+import { PlaybackError, releaseVideo } from "../trailer/player";
+import { PreviewPlayback, type PlaybackEvents } from "../trailer/retained";
 import type { TrailerService } from "../trailer/service";
-import type { TrailerFailure, TrailerReport } from "../trailer/types";
+import type {
+  PlaybackAttempt,
+  TrailerFailure,
+  TrailerReport,
+} from "../trailer/types";
 export function usePreview(
   videoRef: RefObject<HTMLVideoElement | null>,
   service: TrailerService | null,
@@ -12,6 +17,8 @@ export function usePreview(
   onMuteChange?: (muted: boolean) => void,
   delay = 1500,
   mutePreference?: RefObject<boolean>,
+  mediaHost?: RefObject<HTMLDivElement | null>,
+  allowRetention = true,
 ) {
   const [report, setReport] = useState<TrailerReport>({
     movieId,
@@ -19,10 +26,36 @@ export function usePreview(
   });
   const generation = useRef(0);
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
     const current = ++generation.current;
     const controller = new AbortController();
+    let active: PreviewPlayback | undefined;
+    let video = videoRef.current;
+    if (mediaHost?.current && (!video || service?.retained.owns(video)))
+      video = document.createElement("video");
+    if (!video) return;
+    let boundVideo: HTMLVideoElement | undefined;
+    const volume = () => {
+      if (!boundVideo) return;
+      if (mutePreference) mutePreference.current = boundVideo.muted;
+      onMuteChange?.(boundVideo.muted);
+    };
+    const attach = (element: HTMLVideoElement) => {
+      boundVideo?.removeEventListener("volumechange", volume);
+      video = element;
+      videoRef.current = element;
+      element.className = "preview-video";
+      element.setAttribute("aria-label", "Movie trailer preview");
+      element.playsInline = true;
+      element.preload = "none";
+      element.muted = mutePreference?.current ?? true;
+      boundVideo = element;
+      element.addEventListener("volumechange", volume);
+      onMuteChange?.(element.muted);
+      if (mediaHost?.current && element.parentElement !== mediaHost.current)
+        mediaHost.current.replaceChildren(element);
+    };
+    attach(video);
+    releaseVideo(video);
     let latest: TrailerReport = {
       movieId,
       phase: enabled && service ? "waiting" : "paused",
@@ -33,19 +66,87 @@ export function usePreview(
       setReport(latest);
       service?.report(latest);
     };
-    video.muted = mutePreference?.current ?? true;
-    onMuteChange?.(video.muted);
-    releaseVideo(video);
     publish({});
-    if (!enabled || !service)
-      return () => {
-        generation.current++;
-        controller.abort();
-        releaseVideo(video);
-      };
+    if (!allowRetention) service?.retained.clear();
+    const cleanup = () => {
+      generation.current++;
+      controller.abort();
+      boundVideo?.removeEventListener("volumechange", volume);
+      if (active) {
+        active.events = undefined;
+        if (!allowRetention || !service?.retained.retain(movieId, active))
+          active.dispose();
+      } else if (video && !service?.retained.owns(video)) releaseVideo(video);
+    };
+    if (!enabled || !service) return cleanup;
+    const events: PlaybackEvents = {
+      resolved: () =>
+        publish({
+          phase: latest.phase === "blocked" ? "blocked" : "resolved",
+          urlResolved: true,
+        }),
+      playing: () =>
+        publish({
+          phase: "playing",
+          urlResolved: true,
+          playbackSucceeded: true,
+          failure: undefined,
+          reason: undefined,
+        }),
+      blocked: () =>
+        publish({
+          phase: "blocked",
+          failure: "autoplay",
+          reason:
+            "Your browser blocked autoplay. Use Play preview to start it.",
+        }),
+    };
+    const resolving = (attempt: PlaybackAttempt) =>
+      publish({
+        phase: "resolving",
+        source: attempt.source,
+        method: attempt.kind === "direct" ? "Native direct play" : "Plex HLS",
+        urlResolved: false,
+        playbackSucceeded: false,
+        reason: undefined,
+        failure: undefined,
+        httpStatus: undefined,
+      });
     const start = async () => {
       try {
-        publish({ phase: "discovering" });
+        const retained = allowRetention
+          ? service.retained.take(movieId)
+          : undefined;
+        if (retained) {
+          active = retained;
+          attach(retained.video);
+          retained.events = events;
+          publish({ metadataFound: true });
+          resolving(retained.attempt);
+          try {
+            if (!retained.control?.restart())
+              throw new PlaybackError(
+                "network",
+                "The retained preview is no longer available.",
+              );
+            await retained.wait(controller.signal);
+            publish({ phase: "ended" });
+            return;
+          } catch (error) {
+            if (controller.signal.aborted) return;
+            retained.dispose();
+            // A retained session may have expired on PMS. Rebuild through the
+            // normal decision/start path; never replay a closed session URL.
+            active = undefined;
+            releaseVideo(video!);
+          }
+        }
+        publish({
+          phase: "discovering",
+          metadataFound: undefined,
+          urlResolved: false,
+          playbackSucceeded: false,
+        });
         const discovery = await service.discover(movieId, controller.signal);
         if (controller.signal.aborted) return;
         publish({
@@ -58,7 +159,7 @@ export function usePreview(
           return;
         }
         const attempts = service.attempts(discovery, (mime) =>
-          video.canPlayType(mime),
+          video!.canPlayType(mime),
         );
         if (!attempts.length) {
           publish({
@@ -74,44 +175,16 @@ export function usePreview(
         let httpStatus: number | undefined;
         for (const attempt of attempts) {
           controller.signal.throwIfAborted();
-          publish({
-            phase: "resolving",
-            source: attempt.source,
-            method:
-              attempt.kind === "direct" ? "Native direct play" : "Plex HLS",
-            urlResolved: false,
-            playbackSucceeded: false,
-            reason: undefined,
-            failure: undefined,
-            httpStatus: undefined,
-          });
+          resolving(attempt);
+          active = new PreviewPlayback(
+            video!,
+            attempt,
+            service.client,
+            events,
+            service.retained.epoch,
+          );
           try {
-            await playAttempt(
-              video,
-              attempt,
-              service.client,
-              controller.signal,
-              () =>
-                publish({
-                  phase: latest.phase === "blocked" ? "blocked" : "resolved",
-                  urlResolved: true,
-                }),
-              () =>
-                publish({
-                  phase: "playing",
-                  urlResolved: true,
-                  playbackSucceeded: true,
-                  failure: undefined,
-                  reason: undefined,
-                }),
-              () =>
-                publish({
-                  phase: "blocked",
-                  failure: "autoplay",
-                  reason:
-                    "Your browser blocked autoplay. Use Play preview to start it.",
-                }),
-            );
+            await active.wait(controller.signal);
             publish({ phase: "ended" });
             return;
           } catch (error) {
@@ -146,12 +219,15 @@ export function usePreview(
           });
       }
     };
-    const timer = setTimeout(() => void start(), retry > 0 ? 0 : delay);
+    const timer = setTimeout(
+      () => void start(),
+      retry > 0 || (allowRetention && service.retained.has(movieId))
+        ? 0
+        : delay,
+    );
     return () => {
-      generation.current++;
       clearTimeout(timer);
-      controller.abort();
-      releaseVideo(video);
+      cleanup();
     };
   }, [
     movieId,
@@ -162,8 +238,9 @@ export function usePreview(
     videoRef,
     onMuteChange,
     mutePreference,
+    mediaHost,
+    allowRetention,
   ]);
-  // Never render a previous movie's successful playback while React runs cleanup.
   return report.movieId === movieId
     ? report
     : ({ movieId, phase: "waiting" } as TrailerReport);

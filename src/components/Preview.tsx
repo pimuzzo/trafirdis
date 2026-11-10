@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePreview } from "../hooks/usePreview";
 import type { TrailerService } from "../trailer/service";
 import { Icon } from "./Icon";
@@ -17,6 +17,7 @@ export function Preview({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
+  const media = useRef<HTMLDivElement>(null);
   const mutePreference = useRef(true);
   const [visible, setVisible] = useState(false);
   const [pageVisible, setPageVisible] = useState(!document.hidden);
@@ -50,8 +51,13 @@ export function Preview({
     setMuted,
     undefined,
     preserveMute ? mutePreference : undefined,
+    media,
+    enabled && pageVisible,
   );
   const playing = report.phase === "playing";
+  useLayoutEffect(() => {
+    video.current?.classList.toggle("is-playing", playing);
+  }, [playing, movieId, report.phase]);
   const busy = [
     "waiting",
     "discovering",
@@ -96,18 +102,7 @@ export function Preview({
       className={`preview ${compact ? "compact-preview" : ""}`}
       data-preview-phase={report.phase}
     >
-      <video
-        ref={video}
-        className={playing ? "preview-video is-playing" : "preview-video"}
-        muted={muted}
-        onVolumeChange={(event) => {
-          mutePreference.current = event.currentTarget.muted;
-          setMuted(event.currentTarget.muted);
-        }}
-        playsInline
-        preload="none"
-        aria-label="Movie trailer preview"
-      />
+      <div ref={media} className="preview-media" />
       <div className="preview-controls">
         <span
           className={`preview-state ${playing ? "is-live" : ""}`}

@@ -8,6 +8,10 @@ export class PlaybackError extends Error {
     super(message);
   }
 }
+export interface PlaybackControl {
+  suspend(): void;
+  restart(): boolean;
+}
 export function releaseVideo(video: HTMLVideoElement) {
   video.pause();
   video.removeAttribute("src");
@@ -37,6 +41,7 @@ export async function playAttempt(
   onResolved: () => void,
   onPlaying: () => void,
   onBlocked: () => void = () => {},
+  onControl?: (control: PlaybackControl) => void,
 ): Promise<void> {
   signal.throwIfAborted();
   let hls: import("hls.js").default | undefined;
@@ -55,6 +60,7 @@ export async function playAttempt(
   }
   return new Promise<void>((resolve, reject) => {
     let settled = false;
+    let suspended = false;
     const startup = new AbortController();
     let awaitingGesture = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -98,22 +104,26 @@ export async function playAttempt(
       if (!settled) onResolved();
     };
     const playing = () => {
+      if (suspended) {
+        video.pause();
+        return;
+      }
       awaitingGesture = false;
       clearTimeout(timer);
       if (!settled) onPlaying();
     };
     const waiting = () => {
-      if (!settled && !awaitingGesture) armTimeout();
+      if (!settled && !awaitingGesture && !suspended) armTimeout();
     };
     const requested = () => {
-      if (settled) return;
+      if (settled || suspended) return;
       awaitingGesture = false;
       armTimeout();
     };
     const error = () => finish(playbackError(video));
     const ended = () => finish();
     const play = () => {
-      if (settled) return;
+      if (settled || suspended) return;
       void video.play().catch((err: unknown) => {
         if (settled) return;
         if (err instanceof DOMException && err.name === "NotAllowedError") {
@@ -187,6 +197,25 @@ export async function playAttempt(
         video.load();
         play();
       }
+      onControl?.({
+        suspend: () => {
+          suspended = true;
+          clearTimeout(timer);
+          video.pause();
+          video.muted = true;
+          video.preload = "none";
+          hls?.stopLoad();
+        },
+        restart: () => {
+          if (settled || signal.aborted) return false;
+          suspended = false;
+          video.currentTime = 0;
+          hls?.startLoad(0);
+          armTimeout();
+          play();
+          return true;
+        },
+      });
     };
     void start().catch((error: unknown) => finish(error));
     if (signal.aborted) abort();

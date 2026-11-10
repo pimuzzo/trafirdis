@@ -2,7 +2,9 @@ import { previewSessionId } from "./session";
 import { PlexClient } from "../plex/client";
 import { discoverTrailers } from "./discovery";
 import type { Discovery, PlaybackAttempt, TrailerReport } from "./types";
+import { RetainedPreviews } from "./retained";
 export class TrailerService {
+  readonly retained = new RetainedPreviews();
   private cache = new Map<string, { expires: number; data: Discovery }>();
   private reports = new Map<string, TrailerReport>();
   constructor(
@@ -26,10 +28,12 @@ export class TrailerService {
     return data;
   }
   clear() {
+    this.retained.clear();
     this.cache.clear();
     this.reports.clear();
   }
   invalidate(id: string) {
+    this.retained.clear();
     this.cache.delete(id);
     this.reports.delete(id);
   }

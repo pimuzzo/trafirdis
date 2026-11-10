@@ -298,6 +298,12 @@ try {
     .getByRole("button", { name: "Disconnect and clear session" })
     .click();
   await page.getByText("Use a Plex token instead", { exact: true }).click();
+  const hlsRequests = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (/\/(decision|start\.m3u8)$|\.ts$/.test(url.pathname))
+      hlsRequests.push(url.pathname);
+  });
   await page
     .getByLabel("Plex authentication token")
     .fill("docker-browser-hls-token");
@@ -318,7 +324,20 @@ try {
     true,
   );
   assert.deepEqual(errors, []);
-  // The fixture rejects every HLS start without a matching fresh decision.
+  await page.waitForFunction(() => {
+    const video = document.querySelector("video");
+    return (
+      video?.buffered.length &&
+      video.buffered.start(0) <= 0.05 &&
+      video.buffered.end(0) >= 0.25
+    );
+  });
+  const bufferedSource = await page
+    .locator("video")
+    .evaluate((video) => video.src);
+  const mediaCount = hlsRequests.length;
+  // New streams require a decision; retained open streams keep their buffer.
+
   for (let i = 0; i < 2; i++) {
     await page
       .locator(".hero")
@@ -359,6 +378,23 @@ try {
         ?.getAttribute("data-preview-phase") === "playing",
   );
   assert.deepEqual(errors, []);
+  assert.equal(
+    await page.locator("video").evaluate((video) => video.src),
+    bufferedSource,
+  );
+  assert.equal(
+    hlsRequests.filter((path) => path.endsWith("/decision")).length,
+    1,
+  );
+  assert.equal(
+    hlsRequests.filter((path) => path.endsWith("start.m3u8")).length,
+    1,
+  );
+  assert.equal(
+    hlsRequests.length,
+    mediaCount,
+    "Warm returns must not rebuild media through the production proxy.",
+  );
   // Exercise hosted authorization through the actual production SPA callback.
   await page.getByRole("button", { name: "Connection settings" }).click();
   await page

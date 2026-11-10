@@ -36,6 +36,7 @@ export default function Catalog({
     () => (client ? new TrailerService(client) : null),
     [client],
   );
+  useEffect(() => () => trailers?.clear(), [trailers]);
   const [diagnostics, setDiagnostics] = useState(false);
   useEffect(() => {
     const shortcut = (e: KeyboardEvent) => {

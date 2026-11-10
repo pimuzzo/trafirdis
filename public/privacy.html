@@ -85,7 +85,12 @@
         The selected movie-library ID is also remembered in local storage for
         each configured server. This preference remains after disconnecting;
         clearing this site's browser data removes it. Catalog and trailer caches
-        stay in memory. The sample library uses local fictional content.
+        stay in memory. Up to two recently playing HLS previews can also keep
+        their browser buffers and open Plex sessions paused and muted for 30
+        seconds to speed up returning to a trailer. They are not saved to
+        persistent storage. Expiry, eviction, settings, tab backgrounding and
+        disconnect release them; Plex may temporarily retain transcoding
+        resources. The sample library uses local fictional content.
       </p>
       <p>
         Disconnect clears local access and catalog caches. It does not revoke

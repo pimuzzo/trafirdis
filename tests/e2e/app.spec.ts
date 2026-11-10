@@ -505,6 +505,8 @@ test("plays Plex HLS through the lazy fallback in Chromium", async ({
     "data-preview-phase",
     "paused",
   );
+  expect(requests.some((r) => r.path.endsWith("/stop"))).toBe(false);
+  await page.getByRole("button", { name: "Connection settings" }).click();
   await expect
     .poll(() => requests.some((r) => r.path.endsWith("/stop")))
     .toBe(true);
@@ -1495,72 +1497,122 @@ test("blocked unmuted trailers resume with Play", async ({ page }) => {
   ).toHaveLength(1);
 });
 
-test("renegotiates HLS after repeated popup reopen and hero scroll return", async ({
-  page,
-}) => {
-  test.setTimeout(60000);
-  const events: { path: string; session: string | null }[] = [];
-  page.on("request", (request) => {
-    const url = new URL(request.url());
-    if (/\/(decision|start\.m3u8|stop)$/.test(url.pathname))
-      events.push({
-        path: url.pathname,
-        session: url.searchParams.get("session"),
+for (const engine of ["native", "mse"] as const) {
+  test(`${engine} HLS reuses buffered previews without new stream requests`, async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
+    if (engine === "mse")
+      await page.addInitScript(() => {
+        const canPlay = HTMLMediaElement.prototype.canPlayType;
+        HTMLMediaElement.prototype.canPlayType = function (mime) {
+          return mime.includes("mpegurl") ? "" : canPlay.call(this, mime);
+        };
       });
-  });
-  const requests = await mockPlex(page, { trailer: "hls" });
-  await connect(page);
-  const hero = page.locator(".hero");
-  const playing = async (host: ReturnType<Page["locator"]>) => {
-    await expect(host.locator("[data-preview-phase]")).toHaveAttribute(
-      "data-preview-phase",
-      "playing",
+    const requests = await mockPlex(page, { trailer: "hls" });
+    let rejectNewMedia = false;
+    await page.route(
+      (url) => /\.(m3u8|ts)$/.test(url.pathname),
+      async (route) => {
+        if (rejectNewMedia)
+          return route.fulfill({
+            status: 503,
+            body: "A warm restart must use its existing buffer",
+          });
+        if (new URL(route.request().url()).pathname.endsWith(".ts"))
+          await new Promise((resolve) => setTimeout(resolve, 1800));
+        await route.fallback();
+      },
     );
-    await expect(page.locator("video")).toHaveCount(1);
-  };
-  await playing(hero);
-  for (let i = 0; i < 2; i++) {
+    await connect(page);
+    const hero = page.locator(".hero");
+    const playing = async (host: ReturnType<Page["locator"]>) => {
+      await expect(host.locator("[data-preview-phase]")).toHaveAttribute(
+        "data-preview-phase",
+        "playing",
+        { timeout: 10000 },
+      );
+      await expect(page.locator("video")).toHaveCount(1);
+    };
+    await playing(hero);
+    const first = await hero.locator("video").elementHandle();
+    const source = await first!.evaluate((video) => video.src);
+    await hero.getByRole("button", { name: "Unmute preview" }).click();
     await hero.getByRole("button", { name: "More info" }).click();
-    await playing(page.getByRole("dialog"));
+    const dialog = page.getByRole("dialog");
+    await playing(dialog);
+    expect(await dialog.locator("video").evaluate((video) => video.src)).toBe(
+      source,
+    );
+    expect(await dialog.locator("video").evaluate((video) => video.muted)).toBe(
+      true,
+    );
+    await dialog.getByRole("button", { name: "Next movie" }).click();
+    await playing(dialog);
+    expect(
+      await first!.evaluate((video) => ({
+        paused: video.paused,
+        muted: video.muted,
+        connected: video.isConnected,
+      })),
+    ).toEqual({ paused: true, muted: true, connected: false });
+    const starts = () =>
+      requests.filter((request) => request.path.endsWith("start.m3u8")).length;
+    expect(starts()).toBe(2);
+    const mediaBefore = requests.filter((request) =>
+      /\.(m3u8|ts)$/.test(request.path),
+    ).length;
+    rejectNewMedia = true;
+    await dialog.getByRole("button", { name: "Previous movie" }).click();
+    await playing(dialog);
+    expect(await dialog.locator("video").evaluate((video) => video.src)).toBe(
+      source,
+    );
+    expect(
+      await dialog.locator("video").evaluate((video) => video.currentTime),
+    ).toBeLessThan(1);
     await page.keyboard.press("Escape");
     await playing(hero);
-  }
-  await hero.getByRole("button", { name: "Unmute preview" }).click();
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await expect(hero.locator("[data-preview-phase]")).toHaveAttribute(
-    "data-preview-phase",
-    "paused",
-  );
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await playing(hero);
-  expect(await hero.locator("video").evaluate((video) => video.muted)).toBe(
-    false,
-  );
-  const starts = events.filter((event) => event.path.endsWith("start.m3u8"));
-  expect(
-    new Set(starts.map((event) => event.session)).size,
-  ).toBeGreaterThanOrEqual(6);
-  for (const start of starts) {
-    const position = events.indexOf(start);
+    expect(await hero.locator("video").evaluate((video) => video.muted)).toBe(
+      true,
+    );
+    await hero.getByRole("button", { name: "Unmute preview" }).click();
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await expect(hero.locator("[data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "paused",
+    );
     expect(
-      events
-        .slice(0, position)
-        .some(
-          (event) =>
-            event.path.endsWith("/decision") && event.session === start.session,
-        ),
-    ).toBe(true);
-  }
-  // Restarts do not depend on invalidating the metadata cache.
-  expect(
-    requests.filter((request) => request.path === "/library/metadata/1"),
-  ).toHaveLength(1);
-  expect(
-    requests.some((request) =>
-      /timeline|scrobble|playQueues/.test(request.path),
-    ),
-  ).toBe(false);
-});
+      await first!.evaluate((video) => ({
+        paused: video.paused,
+        muted: video.muted,
+      })),
+    ).toEqual({ paused: true, muted: true });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await playing(hero);
+    expect(await hero.locator("video").evaluate((video) => video.muted)).toBe(
+      false,
+    );
+    expect(
+      await hero.locator("video").evaluate((video) => video.currentTime),
+    ).toBeLessThan(1);
+    expect(starts()).toBe(2);
+    expect(
+      requests.filter((request) => request.path.endsWith("/decision")),
+    ).toHaveLength(2);
+    expect(
+      requests.filter((request) => /\.(m3u8|ts)$/.test(request.path)),
+    ).toHaveLength(mediaBefore);
+    // Refresh/disconnect must release both active and retained sessions.
+    await page.getByRole("button", { name: "Connection settings" }).click();
+    await expect
+      .poll(
+        () =>
+          requests.filter((request) => request.path.endsWith("/stop")).length,
+      )
+      .toBe(2);
+  });
+}
 
 for (const decision of ["denied", "malformed", "auth"] as const) {
   test(`does not load HLS after a ${decision} playback decision`, async ({
@@ -1583,3 +1635,59 @@ for (const decision of ["denied", "malformed", "auth"] as const) {
     ).toBeEnabled();
   });
 }
+
+test("a failed retained restart rebuilds through a fresh approved Plex session", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  const requests = await mockPlex(page, { trailer: "hls" });
+  const sessions: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("start.m3u8"))
+      sessions.push(url.searchParams.get("session")!);
+  });
+  await connect(page);
+  const hero = page.locator(".hero");
+  await expect(hero.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  const first = await hero.locator("video").elementHandle();
+  await hero.getByRole("button", { name: "More info" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  await dialog.getByRole("button", { name: "Next movie" }).click();
+  await expect(dialog.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  // A valid retained buffer can still fail when resumed; fail only that play.
+  await first!.evaluate((video) => {
+    const play = video.play;
+    video.play = function () {
+      video.play = play;
+      return Promise.reject(
+        new DOMException("Expired retained playback", "NotSupportedError"),
+      );
+    };
+  });
+  await dialog.getByRole("button", { name: "Previous movie" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "First Light", exact: true }),
+  ).toBeVisible();
+  await expect(dialog.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  expect(sessions).toHaveLength(3);
+  expect(new Set(sessions).size).toBe(3);
+  expect(
+    requests.filter((request) => request.path.endsWith("/decision")),
+  ).toHaveLength(3);
+  expect(requests.some((request) => request.path.endsWith("/stop"))).toBe(true);
+  await expect(page.locator("video")).toHaveCount(1);
+});

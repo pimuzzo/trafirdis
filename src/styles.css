@@ -1446,6 +1446,10 @@ input::placeholder {
   z-index: 1;
   pointer-events: none;
 }
+.preview-media {
+  position: absolute;
+  inset: 0;
+}
 .preview-video {
   width: 100%;
   height: 100%;
