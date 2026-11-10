@@ -57,10 +57,8 @@ export function usePreview(
           publish({ phase: "unavailable", failure: "no-trailer" });
           return;
         }
-        const attempts = service.attempts(
-          discovery,
-          (mime) => video.canPlayType(mime),
-          movieId,
+        const attempts = service.attempts(discovery, (mime) =>
+          video.canPlayType(mime),
         );
         if (!attempts.length) {
           publish({
@@ -98,18 +96,14 @@ export function usePreview(
                   phase: latest.phase === "blocked" ? "blocked" : "resolved",
                   urlResolved: true,
                 }),
-              () => {
-                if (current !== generation.current || controller.signal.aborted)
-                  return;
-                service.rememberPlayback(movieId, discovery, attempt);
+              () =>
                 publish({
                   phase: "playing",
                   urlResolved: true,
                   playbackSucceeded: true,
                   failure: undefined,
                   reason: undefined,
-                });
-              },
+                }),
               () =>
                 publish({
                   phase: "blocked",
@@ -122,7 +116,6 @@ export function usePreview(
             return;
           } catch (error) {
             if (controller.signal.aborted) return;
-            service.forgetPlayback(movieId, discovery, attempt);
             httpStatus = undefined;
             if (error instanceof PlaybackError) {
               lastFailure = error.message;
@@ -153,10 +146,7 @@ export function usePreview(
           });
       }
     };
-    const timer = setTimeout(
-      () => void start(),
-      retry > 0 || service.canRestartImmediately(movieId) ? 0 : delay,
-    );
+    const timer = setTimeout(() => void start(), retry > 0 ? 0 : delay);
     return () => {
       generation.current++;
       clearTimeout(timer);

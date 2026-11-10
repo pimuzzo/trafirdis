@@ -242,20 +242,6 @@ This follow-up applies to the accepted hero and details preview surfaces. It doe
 3. Production Docker integration exercises the same strict decision/start contract and restart sequences. Quality, browser and Docker CI jobs pass.
 4. The maintainer repeats these scenarios on the real Plex server. Synthetic tests validate the client protocol and lifecycle; they cannot establish that every provider/codec combination succeeds on the actual server.
 
-The maintainer confirmed the restart reliability fix on the real Chrome/Docker deployment on 2026-11-10.
-
-### Faster repeat previews — 2026-11-10
-
-The maintainer prefers repeat previews to restart from the beginning more quickly, rather than resume the interrupted position.
-
-- Keep the 1.5-second selection delay for a first/unverified preview. For a trailer that actually emitted `playing` and still has fresh cached discovery metadata, skip that delay on hero visibility return, details reopen and A → B → A navigation.
-- Try the last verified resource/transport first, retaining other candidates if it fails. A failure drops that preference; discovery, URL resolution, approval and cancelled work alone must not create one.
-- Bind the preference to the existing in-memory discovery entry (five-minute TTL, maximum 60 movies). Expiry, eviction, explicit invalidation, refresh, disconnect or client replacement removes it. Late events must not repopulate invalidated/cancelled entries.
-- Always restart at zero. Continue generating fresh HLS sessions and obtaining fresh Plex decisions; never cache/replay old session URLs, manifests, media bytes or approvals. Preserve one active player, existing cleanup/audio behavior and honest per-attempt playback diagnostics.
-- Do not preload neighboring trailers or add persistent storage, dependencies or external services. Plex stream preparation remains a real latency boundary; no instant-start guarantee is made.
-
-Acceptance includes exact scheduler tests for cold versus repeated selection, working-route preference/fallback/expiry tests, and browser coverage of a failed native route followed by successful HLS, details A → B → A and hero scroll return. Each HLS restart must use a fresh approved session at offset zero. Real-library latency should be checked separately by the maintainer.
-
 ### 4.5 Movie Details
 
 Selecting a movie should display:
