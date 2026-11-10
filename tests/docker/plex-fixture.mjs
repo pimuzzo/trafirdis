@@ -14,9 +14,6 @@ const movie = {
   thumb: "/library/metadata/1/thumb/1",
   art: "/library/metadata/1/art/1",
 };
-const validHlsExtras = new Set();
-const hlsSessions = new Map();
-let nextHlsExtra = 1000;
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://plex-fixture:32400");
   const token =
@@ -100,15 +97,6 @@ const server = createServer((req, res) => {
     return;
   }
   if (url.pathname.endsWith("/start.m3u8")) {
-    if (token === "docker-browser-hls-token") {
-      const key = url.searchParams.get("path");
-      if (!validHlsExtras.has(key)) {
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end("<h1>400 Bad Request</h1>");
-        return;
-      }
-      hlsSessions.set(url.searchParams.get("session"), key);
-    }
     res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
     res.end(readFileSync("/fixtures/preview.m3u8"));
     return;
@@ -119,13 +107,6 @@ const server = createServer((req, res) => {
     return;
   }
   if (url.pathname.endsWith("/stop")) {
-    if (token === "docker-browser-hls-token") {
-      const session = url.searchParams.get("session");
-      validHlsExtras.delete(hlsSessions.get(session));
-      hlsSessions.delete(session);
-      // Cleanup can report no encoder session even when the extra has expired.
-      res.writeHead(404);
-    }
     res.end();
     return;
   }
@@ -162,10 +143,6 @@ const server = createServer((req, res) => {
     return;
   }
   if (url.pathname === "/library/metadata/1") {
-    const extraId =
-      token === "docker-browser-hls-token" ? String(++nextHlsExtra) : "101";
-    if (token === "docker-browser-hls-token")
-      validHlsExtras.add(`/library/metadata/${extraId}`);
     json({
       MediaContainer: {
         Metadata: [
@@ -174,8 +151,8 @@ const server = createServer((req, res) => {
             Extras: {
               Metadata: [
                 {
-                  ratingKey: extraId,
-                  key: `/library/metadata/${extraId}`,
+                  ratingKey: "101",
+                  key: "/library/metadata/101",
                   type: "clip",
                   subtype: "trailer",
                   Media:

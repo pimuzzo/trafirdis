@@ -22,7 +22,6 @@ describe("Plex integration boundary", () => {
     expect(JSON.stringify(url)).not.toContain("private-test-token");
     expect(init?.headers).toHaveProperty("X-Plex-Token", "private-test-token");
     expect(init?.redirect).toBe("error");
-    expect(init?.cache).toBe("no-store");
   });
   it("pages until the actual total, even when Plex returns fewer than requested", async () => {
     const fetcher = vi

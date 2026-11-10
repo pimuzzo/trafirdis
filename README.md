@@ -156,7 +156,7 @@ Disconnect clears local access and catalog caches; it does not revoke Plex’s A
 
 Trafirdis never sends timeline, scrobble, playback-progress, play-queue, library-edit, or metadata-refresh calls. Streaming may create a temporary PMS transcoder session; cleanup makes a best-effort stop call scoped to that preview session. This uses Plex's existing streaming capabilities, not a custom transcoder or full-movie playback engine.
 
-Trailer discovery has an in-memory, 60-entry LRU cache with a five-minute expiry for callers that allow reuse. Every actual preview start bypasses that cache and re-reads the movie's extras from Plex, including popup reopen, scrolling back to the hero, pause/resume and retries. API reads bypass the browser HTTP cache as well. Failures and cancelled fetches are not cached. TanStack Query caches catalog data for five minutes and collects inactive queries after ten minutes. Refresh clears trailer discovery and refetches catalog metadata. No movie catalog persists across reloads.
+Trailer discovery is an in-memory, 60-entry LRU cache with a five-minute expiry. Failures and cancelled fetches are not cached. TanStack Query caches catalog data for five minutes and collects inactive queries after ten minutes. Refresh clears trailer discovery and refetches catalog metadata. No movie catalog persists across reloads.
 
 ## Trailer diagnostics and real-server validation
 

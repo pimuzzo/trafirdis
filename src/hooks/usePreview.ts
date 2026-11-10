@@ -46,9 +46,7 @@ export function usePreview(
     const start = async () => {
       try {
         publish({ phase: "discovering" });
-        const discovery = await service.discover(movieId, controller.signal, {
-          fresh: true,
-        });
+        const discovery = await service.discover(movieId, controller.signal);
         if (controller.signal.aborted) return;
         publish({
           phase: "metadata",

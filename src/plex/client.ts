@@ -106,7 +106,6 @@ export class PlexClient {
         `${this.base}${this.safePath(path)}`,
         {
           headers: this.headers(),
-          cache: "no-store",
           signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
           redirect: "error",
           credentials: "omit",

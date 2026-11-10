@@ -148,55 +148,6 @@ describe("trailer discovery and resolution", () => {
     await service.discover("1");
     expect(details).toHaveBeenCalledTimes(64);
   });
-  it("revalidates extras for playback without losing diagnostic observations", async () => {
-    const client = new PlexClient("x");
-    const updated = {
-      ...parent,
-      Extras: {
-        Metadata: [{ ...extra, key: "/library/metadata/3", ratingKey: "3" }],
-      },
-    };
-    const details = vi
-      .spyOn(client, "details")
-      .mockResolvedValueOnce(parent)
-      .mockResolvedValueOnce(updated);
-    const service = new TrailerService(client);
-    const cached = await service.discover("1");
-    service.report({
-      movieId: "1",
-      phase: "paused",
-      playbackSucceeded: true,
-    });
-    expect(await service.discover("1")).toBe(cached);
-    const signal = new AbortController().signal;
-    const fresh = await service.discover("1", signal, { fresh: true });
-    expect(fresh.candidates[0].key).toBe("/library/metadata/3");
-    expect(details).toHaveBeenCalledTimes(2);
-    expect(details).toHaveBeenLastCalledWith("1", signal);
-    expect(await service.discover("1")).toBe(fresh);
-    expect(service.snapshot()[0]).toMatchObject({
-      phase: "paused",
-      playbackSucceeded: true,
-    });
-  });
-  it("does not reuse old resources after a failed playback revalidation", async () => {
-    const client = new PlexClient("x");
-    const details = vi
-      .spyOn(client, "details")
-      .mockResolvedValueOnce(parent)
-      .mockRejectedValueOnce(new Error("network"))
-      .mockResolvedValueOnce({
-        ...parent,
-        Extras: { Metadata: [] },
-      });
-    const service = new TrailerService(client);
-    await service.discover("1");
-    await expect(
-      service.discover("1", undefined, { fresh: true }),
-    ).rejects.toThrow("network");
-    expect((await service.discover("1")).metadataFound).toBe(false);
-    expect(details).toHaveBeenCalledTimes(3);
-  });
   it("does not cache failed discovery or cancelled responses", async () => {
     const client = new PlexClient("x");
     const details = vi

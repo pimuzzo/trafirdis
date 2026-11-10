@@ -76,9 +76,7 @@ describe("automatic preview lifecycle", () => {
     await act(() => vi.advanceTimersByTimeAsync(1499));
     expect(discover).not.toHaveBeenCalled();
     await act(() => vi.advanceTimersByTimeAsync(1));
-    expect(discover).toHaveBeenCalledWith("B", expect.any(AbortSignal), {
-      fresh: true,
-    });
+    expect(discover).toHaveBeenCalledWith("B", expect.any(AbortSignal));
     expect(playAttempt).toHaveBeenCalledTimes(1);
     expect(ref.current?.muted).toBe(true);
   });
