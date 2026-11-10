@@ -79,10 +79,7 @@ export function Hero({
             alt=""
             aria-hidden="true"
           />
-          <span>
-            IN YOUR LIBRARY<span className="footnote-dot">·</span>
-            {movie.genres.slice(0, 2).join(" / ") || "Movie"}
-          </span>
+          <span>{movie.genres.slice(0, 2).join(" / ") || "Movie"}</span>
         </div>
       </div>
       <div className="hero-caption">
