@@ -527,7 +527,7 @@ for (const surface of ["hero", "details"] as const) {
       });
       await expect(preview).toHaveAttribute("data-preview-phase", "waiting");
       await expect(play).toBeDisabled();
-      const status = host.getByRole("status");
+      const status = host.locator(".preview-state");
       const spinner = status.locator(".preview-spinner");
       await expect(status).toHaveText("Finding your preview");
       await expect(spinner).toBeVisible();

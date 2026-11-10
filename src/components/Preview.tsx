@@ -112,7 +112,7 @@ export function Preview({
         <span
           className={`preview-state ${playing ? "is-live" : ""}`}
           title={report.reason}
-          role="status"
+          aria-live="polite"
         >
           <span
             className={loading ? "preview-spinner" : "status-dot"}
