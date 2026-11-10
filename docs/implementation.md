@@ -54,7 +54,7 @@ The Unwatched view keeps genre and other category rails, but omits its redundant
 
 ## Details audio preference
 
-Details keep the user's mute/unmute choice in memory while the popup remains open, including previous/next navigation and pause/resume. The popup reuses one video element across films; stream cancellation and cleanup still run for every movie change. Closing and reopening details starts a fresh muted session, and the hero retains its original muted restart policy.
+Details keep the user's mute/unmute choice in memory while the popup remains open, including previous/next navigation and pause/resume. The popup reuses one video element across films; stream cancellation and cleanup still run for every movie change. Closing and reopening details starts a fresh muted session. The subsequent hero audio preference change is recorded below.
 
 Autoplay denial retains the selected audio state and loaded source for an explicit Play preview gesture. Later metadata cannot overwrite the blocked phase; waiting for user input does not expire the source, while an actual manual playback retry still has the normal startup timeout. No preference is persisted and no Plex operation or authentication behavior changes.
 
@@ -64,3 +64,9 @@ Autoplay denial retains the selected audio state and loaded source for an explic
 - **Shortlist: removed from planned work.** The maintainer uses Unwatched → Recently Added to review candidates for the evening. No separate temporary or shared candidate list is required.
 
 These are scope and acceptance decisions; they introduce no application behavior or storage changes.
+
+## Hero audio preference
+
+The hero starts muted and keeps the user's mute/unmute choice across Surprise me and pause/resume, settings and tab visibility restarts. It reuses the existing preview audio preference and one video element while each movie change cancels and replaces the old stream. Muting again also carries over to the next suggestion.
+
+The preference stays in memory for the mounted hero preview. Opening details removes that preview, so returning starts muted again; reloading also starts muted. Browser denial of unmuted autoplay retains the source and sound preference for Play preview. This adds no storage, dependency or Plex operation.

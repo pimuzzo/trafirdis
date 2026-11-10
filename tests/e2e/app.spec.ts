@@ -384,7 +384,7 @@ test("plays a native trailer after the delay, muted and inline, and stops on hid
     requests.some((r) => /timeline|scrobble|playQueues/.test(r.path)),
   ).toBe(false);
 });
-test("mute controls match the video after pause, settings and tab visibility restarts", async ({
+test("hero keeps audio and matching controls after pause, settings and visibility restarts", async ({
   page,
 }) => {
   test.setTimeout(60000);
@@ -392,27 +392,25 @@ test("mute controls match the video after pause, settings and tab visibility res
   await connect(page);
   const preview = page.locator("[data-preview-phase]");
   const video = page.locator("video");
-  const unmute = async () => {
+  const expectUnmuted = async () => {
     await expect(preview).toHaveAttribute("data-preview-phase", "playing");
-    await expect(
-      page.getByRole("button", { name: "Unmute preview" }),
-    ).toBeEnabled();
-    expect(await video.evaluate((element) => element.muted)).toBe(true);
-    await page.getByRole("button", { name: "Unmute preview" }).click();
     await expect(
       page.getByRole("button", { name: "Mute preview", exact: true }),
     ).toBeEnabled();
     expect(await video.evaluate((element) => element.muted)).toBe(false);
   };
-  await unmute();
+  await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+  expect(await video.evaluate((element) => element.muted)).toBe(true);
+  await page.getByRole("button", { name: "Unmute preview" }).click();
+  await expectUnmuted();
   await page.getByRole("button", { name: "Pause preview" }).click();
   await expect(preview).toHaveAttribute("data-preview-phase", "paused");
   await page.getByRole("button", { name: "Play preview" }).click();
-  await unmute();
+  await expectUnmuted();
   await page.getByRole("button", { name: "Connection settings" }).click();
   await expect(preview).toHaveAttribute("data-preview-phase", "paused");
   await page.keyboard.press("Escape");
-  await unmute();
+  await expectUnmuted();
   await page.evaluate(() => {
     Object.defineProperty(document, "hidden", {
       configurable: true,
@@ -428,7 +426,7 @@ test("mute controls match the video after pause, settings and tab visibility res
     });
     document.dispatchEvent(new Event("visibilitychange"));
   });
-  await unmute();
+  await expectUnmuted();
 });
 test("poster focus does not replace the random featured movie or its preview", async ({
   page,
@@ -1152,28 +1150,85 @@ test("Unwatched preserves categories, skips watched neighbors and combines with 
   ).toBeVisible();
 });
 
-test("Surprise me changes films and releases the old preview", async ({
+test("Surprise me preserves audio choices and replaces the old stream on one player", async ({
   page,
 }) => {
+  test.setTimeout(60000);
   await mockPlex(page, { trailer: "direct" });
   await connect(page);
   const hero = page.locator(".hero");
-  await expect(hero.locator("[data-preview-phase]")).toHaveAttribute(
-    "data-preview-phase",
-    "playing",
-  );
-  const previous = await hero.locator("video").elementHandle();
+  const video = hero.locator("video");
+  const preview = hero.locator("[data-preview-phase]");
+  const playing = async (muted: boolean) => {
+    await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+    expect(await video.evaluate((element) => element.muted)).toBe(muted);
+    await expect(
+      hero.getByRole("button", {
+        name: muted ? "Unmute preview" : "Mute preview",
+        exact: true,
+      }),
+    ).toBeEnabled();
+  };
+  await playing(true);
+  const original = await video.elementHandle();
+  const originalSource = await video.getAttribute("src");
   const surprise = hero.getByRole("button", { name: "Surprise me" });
   await surprise.click();
   await expect(hero.locator("h1")).toHaveText("Third Shore");
-  await expect(hero.locator("[data-preview-phase]")).toHaveAttribute(
-    "data-preview-phase",
-    "playing",
-  );
+  await playing(true);
+  expect(await video.getAttribute("src")).not.toBe(originalSource);
+  expect(await original!.evaluate((node) => node.isConnected)).toBe(true);
+  await hero.getByRole("button", { name: "Unmute preview" }).click();
+  await playing(false);
+  await surprise.click();
+  await expect(hero.locator("h1")).toHaveText("First Light");
+  await playing(false);
+  expect(await video.getAttribute("src")).toBe(originalSource);
+  await hero.getByRole("button", { name: "Mute preview", exact: true }).click();
+  await surprise.click();
+  await expect(hero.locator("h1")).toHaveText("Third Shore");
+  await playing(true);
   await expect(page.locator("video")).toHaveCount(1);
-  expect(await previous!.getAttribute("src")).toBeNull();
-  expect(await hero.locator("video").evaluate((v) => v.muted)).toBe(true);
+  expect(await original!.evaluate((node) => node.isConnected)).toBe(true);
   await expect(surprise).toBeFocused();
+});
+
+test("hero keeps unmuted audio ready when Surprise me autoplay is blocked", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = HTMLMediaElement.prototype.play;
+    let blocked = false;
+    HTMLMediaElement.prototype.play = function () {
+      if (!this.muted && this.src.includes("/library/parts/3/") && !blocked) {
+        blocked = true;
+        return Promise.reject(new DOMException("Blocked", "NotAllowedError"));
+      }
+      return original.call(this);
+    };
+  });
+  const requests = await mockPlex(page, { trailer: "direct" });
+  await connect(page);
+  const hero = page.locator(".hero");
+  const video = hero.locator("video");
+  const preview = hero.locator("[data-preview-phase]");
+  await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+  await hero.getByRole("button", { name: "Unmute preview" }).click();
+  await hero.getByRole("button", { name: "Surprise me" }).click();
+  await expect(hero.locator("h1")).toHaveText("Third Shore");
+  await expect(preview).toHaveAttribute("data-preview-phase", "blocked");
+  expect(await video.evaluate((element) => element.muted)).toBe(false);
+  const source = await video.getAttribute("src");
+  await hero.getByRole("button", { name: "Play preview" }).click();
+  await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+  expect(await video.getAttribute("src")).toBe(source);
+  expect(await video.evaluate((element) => element.muted)).toBe(false);
+  await expect(
+    hero.getByRole("button", { name: "Mute preview", exact: true }),
+  ).toBeEnabled();
+  expect(
+    requests.filter((request) => request.path === "/library/metadata/3"),
+  ).toHaveLength(1);
 });
 
 test("Surprise me falls back when all films are watched", async ({ page }) => {

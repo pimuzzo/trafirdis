@@ -38,10 +38,10 @@ export function Hero({
       <div className="hero-shade" />
       {previewVisible && (
         <Preview
-          key={movie.id}
           service={trailers}
           movieId={movie.id}
           enabled={previewEnabled}
+          preserveMute
         />
       )}
       <div className="hero-content">
