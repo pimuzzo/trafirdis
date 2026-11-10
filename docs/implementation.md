@@ -57,3 +57,10 @@ The Unwatched view keeps genre and other category rails, but omits its redundant
 Details keep the user's mute/unmute choice in memory while the popup remains open, including previous/next navigation and pause/resume. The popup reuses one video element across films; stream cancellation and cleanup still run for every movie change. Closing and reopening details starts a fresh muted session, and the hero retains its original muted restart policy.
 
 Autoplay denial retains the selected audio state and loaded source for an explicit Play preview gesture. Later metadata cannot overwrite the blocked phase; waiting for user input does not expire the source, while an actual manual playback retry still has the normal startup timeout. No preference is persisted and no Plex operation or authentication behavior changes.
+
+## Accepted scope decisions — 2026-11-10
+
+- **Pick for me: complete by acceptance.** Surprise me in the hero, followed by Open in Plex, satisfies the maintainer's discovery use case. The existing unwatched-first, full-selected-library behavior is accepted instead of a separate filter-aware picker.
+- **Shortlist: removed from planned work.** The maintainer uses Unwatched → Recently Added to review candidates for the evening. No separate temporary or shared candidate list is required.
+
+These are scope and acceptance decisions; they introduce no application behavior or storage changes.

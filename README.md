@@ -140,6 +140,9 @@ Disconnect clears local access and catalog caches; it does not revoke Plex’s A
 - Categories remain visible during search and every filter combination, including Unwatched. Empty categories are omitted. Each rail initially renders 30 posters; Show more reveals subsequent batches. Catalog retrieval itself is paginated and loads the complete selected library.
 - Open in Plex uses the server's machine identifier and the movie's metadata key. The details panel also provides Copy title if a particular Plex Web version cannot navigate to the film. With no machine identifier, the link opens Plex Web's home.
 
+- **Pick for me** is fulfilled by **Surprise me → Open in Plex** in the hero, using the existing unwatched-first selection from the selected library.
+- A dedicated **Shortlist** is not planned. Use **Unwatched → Recently Added** as the list of candidates for the evening.
+
 ## How previews work
 
 1. A stable selection waits **1.5 seconds** before fetching details with `includeExtras=1`. Rapid selections cancel pending work.
