@@ -1171,18 +1171,12 @@ test("Surprise me changes films and releases the old preview", async ({
     "playing",
   );
   await expect(page.locator("video")).toHaveCount(1);
-  expect(await previous!.evaluate((video) => video.hasAttribute("src"))).toBe(
-    false,
-  );
-  expect(await hero.locator("video").evaluate((video) => video.muted)).toBe(
-    true,
-  );
+  expect(await previous!.getAttribute("src")).toBeNull();
+  expect(await hero.locator("video").evaluate((v) => v.muted)).toBe(true);
   await expect(surprise).toBeFocused();
 });
 
-test("Surprise me falls back when all films are watched", async ({
-  page,
-}) => {
+test("Surprise me falls back when all films are watched", async ({ page }) => {
   await mockPlex(page, { trailer: "missing", allWatched: true });
   await connect(page);
   const hero = page.locator(".hero");
