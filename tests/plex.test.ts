@@ -148,3 +148,74 @@ describe("Plex integration boundary", () => {
     );
   });
 });
+
+describe("preview playback decisions", () => {
+  const path =
+    "/video/:/transcode/universal/start.m3u8?path=%2Flibrary%2Fmetadata%2F200&session=preview-one&X-Plex-Session-Identifier=preview-one&X-Plex-Client-Identifier=test-client&protocol=hls&directPlay=0&directStream=1&mediaIndex=0&partIndex=0";
+  it("requests a fresh decision with the exact start parameters and header-only credentials", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      json({
+        generalDecisionCode: 1001,
+        transcodeDecisionCode: 1001,
+      }),
+    );
+    await new PlexClient(
+      "private-test-token",
+      fetcher,
+      "test-client",
+    ).preparePreview(path, new AbortController().signal);
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toBe(`/plex${path.replace("start.m3u8", "decision")}`);
+    expect(url).not.toContain("private-test-token");
+    expect(init).toMatchObject({
+      cache: "no-store",
+      redirect: "error",
+      credentials: "omit",
+      headers: {
+        "X-Plex-Token": "private-test-token",
+        "X-Plex-Client-Identifier": "test-client",
+      },
+    });
+  });
+  it.each([
+    {},
+    { generalDecisionCode: 1001 },
+    { generalDecisionCode: 1000, transcodeDecisionCode: 1000 },
+    { generalDecisionCode: 2000, transcodeDecisionCode: 1001 },
+    { generalDecisionCode: 1001, transcodeDecisionCode: 4005 },
+    { generalDecisionCode: "1001", transcodeDecisionCode: "1001" },
+  ])(
+    "rejects missing, denied or unsupported decision codes: %j",
+    async (value) => {
+      const client = new PlexClient(
+        "secret",
+        vi.fn<typeof fetch>().mockResolvedValue(
+          json({
+            ...value,
+            generalDecisionText: "secret private provider URL",
+          }),
+        ),
+      );
+      await expect(
+        client.preparePreview(path, new AbortController().signal),
+      ).rejects.toMatchObject({
+        code: "response",
+        message: "Plex did not approve this trailer's streaming conversion.",
+      });
+    },
+  );
+  it.each([
+    "https://outside.example/start.m3u8",
+    "/library/metadata/1",
+    "//outside.example/start.m3u8",
+  ])("rejects an unsafe decision route: %s", async (path) => {
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(
+      new PlexClient("secret", fetcher).preparePreview(
+        path,
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ code: "unsafe" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});

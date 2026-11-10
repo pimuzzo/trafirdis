@@ -220,6 +220,28 @@ If Plex returns a trailer format unsupported by the browser, investigate Plex's 
 
 Do not assume Plex Pass guarantees browser-playable trailers for every movie.
 
+### Preview restart reliability — 2026-11-10
+
+This follow-up applies to the accepted hero and details preview surfaces. It does not restore hover-driven hero selection or the removed floating preview.
+
+**Problem:** On the reported Chrome/Docker deployment, a Plex trailer can play initially but fail after closing/reopening details while it is playing, or after scrolling the playing hero out of view and back. Server logs identify HTTP 400 starts with a missing playback decision. Refreshing extras alone did not resolve the issue.
+
+**Requirements:**
+
+- Before each Plex HLS attempt, request and validate a fresh playback decision through the configured Plex proxy. Use the extra's key, never the full movie, and the same media indices, stream settings, client identity and playback session as the corresponding start.
+- HTTP 200 alone is not approval: require a recognized conversion-OK decision. A denied, malformed, unsupported or failed decision must not start a stream or bypass Plex restrictions.
+- Negotiate again on popup reopen, hero visibility return, pause/resume, replay and candidate fallback. Availability metadata may remain cached; playback decisions must not be cached or shared across attempts.
+- Cancelling or timing out negotiation must abort the request and prevent late responses from attaching a source. Keep one active player and best-effort cleanup scoped to its session.
+- Preserve accepted audio preferences, loading controls, muted defaults and explicit retry/autoplay behavior. Decision approval does not establish URL resolution or actual playback.
+- Add no backend, database, dependency, external media service, metadata write or watch-history operation. Never commit private logs, real credentials or library data.
+
+**Acceptance:**
+
+1. Browser tests repeatedly close/reopen playing details and scroll a playing hero out of view/back. A synthetic server rejects any start without a matching decision; playback resumes with fresh session identifiers and one player.
+2. Unit/browser coverage rejects unsuccessful HTTP/decision responses and proves cancelled or timed-out negotiations cannot start stale playback. Existing native direct play remains supported.
+3. Production Docker integration exercises the same strict decision/start contract and restart sequences. Quality, browser and Docker CI jobs pass.
+4. The maintainer repeats these scenarios on the real Plex server. Synthetic tests validate the client protocol and lifecycle; they cannot establish that every provider/codec combination succeeds on the actual server.
+
 ### 4.5 Movie Details
 
 Selecting a movie should display:

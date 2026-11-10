@@ -139,3 +139,104 @@ describe("native video playback", () => {
     expect(video.hasAttribute("src")).toBe(false);
   });
 });
+
+describe("HLS decision lifecycle", () => {
+  const hlsAttempt = {
+    kind: "hls" as const,
+    source: "Plex trailer" as const,
+    session: "preview-one",
+    path: "/video/:/transcode/universal/start.m3u8?session=preview-one&path=%2Flibrary%2Fmetadata%2F200",
+  };
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue(
+      "probably",
+    );
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+  });
+  afterEach(() => vi.useRealTimers());
+  function setup() {
+    const client = new PlexClient("x");
+    const stop = vi.spyOn(client, "stopPreviewSession").mockResolvedValue();
+    const video = document.createElement("video");
+    const controller = new AbortController();
+    const resolved = vi.fn(),
+      playing = vi.fn();
+    const run = () =>
+      playAttempt(
+        video,
+        hlsAttempt,
+        client,
+        controller.signal,
+        resolved,
+        playing,
+      );
+    return { client, stop, video, controller, resolved, playing, run };
+  }
+  it("waits for approval without marking the source resolved or playback successful", async () => {
+    const { client, video, resolved, playing, controller, stop, run } = setup();
+    let approve!: () => void;
+    vi.spyOn(client, "preparePreview").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          approve = resolve;
+        }),
+    );
+    const result = run();
+    expect(video.hasAttribute("src")).toBe(false);
+    expect(resolved).not.toHaveBeenCalled();
+    expect(playing).not.toHaveBeenCalled();
+    approve();
+    await Promise.resolve();
+    expect(video.src).toContain("start.m3u8");
+    expect(resolved).not.toHaveBeenCalled();
+    video.dispatchEvent(new Event("loadedmetadata"));
+    expect(resolved).toHaveBeenCalledOnce();
+    expect(playing).not.toHaveBeenCalled();
+    video.dispatchEvent(new Event("playing"));
+    expect(playing).toHaveBeenCalledOnce();
+    const check = expect(result).rejects.toMatchObject({ name: "AbortError" });
+    controller.abort();
+    await check;
+    expect(stop).toHaveBeenCalledExactlyOnceWith("preview-one");
+  });
+  it("never starts a stream when the decision fails", async () => {
+    const { client, video, stop, run } = setup();
+    vi.spyOn(client, "preparePreview").mockRejectedValue(
+      new Error("Decision denied"),
+    );
+    await expect(run()).rejects.toThrow("Decision denied");
+    expect(video.hasAttribute("src")).toBe(false);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledOnce();
+  });
+  it.each(["cancel", "timeout"])(
+    "ignores a late decision after %s and releases its request",
+    async (mode) => {
+      const { client, video, controller, stop, run } = setup();
+      let approve!: () => void;
+      let signal!: AbortSignal;
+      vi.spyOn(client, "preparePreview").mockImplementation((_path, input) => {
+        signal = input;
+        return new Promise<void>((resolve) => {
+          approve = resolve;
+        });
+      });
+      const result = run();
+      const check = expect(result).rejects.toMatchObject(
+        mode === "cancel" ? { name: "AbortError" } : { code: "timeout" },
+      );
+      if (mode === "cancel") controller.abort();
+      else await vi.advanceTimersByTimeAsync(12000);
+      await check;
+      expect(signal.aborted).toBe(true);
+      approve();
+      await Promise.resolve();
+      expect(video.hasAttribute("src")).toBe(false);
+      expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+      expect(stop).toHaveBeenCalledExactlyOnceWith("preview-one");
+    },
+  );
+});
