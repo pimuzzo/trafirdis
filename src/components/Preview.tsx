@@ -59,6 +59,20 @@ export function Preview({
     "resolving",
     "resolved",
   ].includes(report.phase);
+  const loading =
+    Boolean(service) && busy && enabled && !paused && visible && pageVisible;
+  const canControl =
+    enabled &&
+    visible &&
+    pageVisible &&
+    ["playing", "paused", "ended", "blocked", "error"].includes(report.phase);
+  const actionLabel = playing
+    ? "Pause preview"
+    : report.phase === "error"
+      ? "Retry preview"
+      : report.phase === "ended"
+        ? "Replay preview"
+        : "Play preview";
   const label = !service
     ? "Previews are available with your Plex library"
     : report.phase === "playing"
@@ -98,15 +112,20 @@ export function Preview({
         <span
           className={`preview-state ${playing ? "is-live" : ""}`}
           title={report.reason}
+          role="status"
         >
-          <span className="status-dot" />
+          <span
+            className={loading ? "preview-spinner" : "status-dot"}
+            aria-hidden="true"
+          />
           {label}
         </span>
         {service && (
           <>
             <button
               className="icon-button"
-              aria-label={playing ? "Pause preview" : "Play preview"}
+              aria-label={actionLabel}
+              disabled={!canControl}
               onClick={() => {
                 if (report.phase === "blocked") {
                   void video.current?.play().catch(() => {});

@@ -482,6 +482,110 @@ test("plays Plex HLS through the lazy fallback in Chromium", async ({
     .poll(() => requests.some((r) => r.path.endsWith("/stop")))
     .toBe(true);
 });
+for (const surface of ["hero", "details"] as const) {
+  test(`${surface} disables Play and shows status loading until media starts`, async ({
+    page,
+  }) => {
+    await mockPlex(page, { trailer: "direct" });
+    const id = surface === "hero" ? "1" : "2";
+    let releaseMetadata!: () => void;
+    let releaseMedia!: () => void;
+    const metadataGate = new Promise<void>((resolve) => {
+      releaseMetadata = resolve;
+    });
+    const mediaGate = new Promise<void>((resolve) => {
+      releaseMedia = resolve;
+    });
+    let metadataRequests = 0;
+    let mediaRequests = 0;
+    await page.route(
+      (url) => url.pathname === `/plex/library/metadata/${id}`,
+      async (route) => {
+        metadataRequests++;
+        await metadataGate;
+        await route.fallback();
+      },
+    );
+    await page.route(
+      (url) => url.pathname.startsWith(`/plex/library/parts/${id}/`),
+      async (route) => {
+        mediaRequests++;
+        await mediaGate;
+        await route.fallback();
+      },
+    );
+    try {
+      await connect(page);
+      if (surface === "details") await recentCards(page).nth(1).click();
+      const host = page.locator(
+        surface === "hero" ? ".hero" : ".details-dialog",
+      );
+      const preview = host.locator("[data-preview-phase]");
+      const play = host.getByRole("button", {
+        name: "Play preview",
+        exact: true,
+      });
+      await expect(preview).toHaveAttribute("data-preview-phase", "waiting");
+      await expect(play).toBeDisabled();
+      const status = host.getByRole("status");
+      const spinner = status.locator(".preview-spinner");
+      await expect(status).toHaveText("Finding your preview");
+      await expect(spinner).toBeVisible();
+      expect(
+        await spinner.evaluate(
+          (element) => getComputedStyle(element).animationName,
+        ),
+      ).toBe("preview-spin");
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await expect
+        .poll(() =>
+          spinner.evaluate(
+            (element) => getComputedStyle(element).animationName,
+          ),
+        )
+        .toBe("none");
+      await expect(preview).toHaveAttribute(
+        "data-preview-phase",
+        "discovering",
+      );
+      await expect(play).toBeDisabled();
+      await play.evaluate((element: HTMLButtonElement) => element.click());
+      expect(metadataRequests).toBe(1);
+      expect(mediaRequests).toBe(0);
+      releaseMetadata();
+      await expect(preview).toHaveAttribute("data-preview-phase", "resolving");
+      await expect.poll(() => mediaRequests).toBe(1);
+      await expect(play).toBeDisabled();
+      await expect(spinner).toBeVisible();
+      await play.evaluate((element: HTMLButtonElement) => element.click());
+      expect(metadataRequests).toBe(1);
+      releaseMedia();
+      await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+      await expect(spinner).toHaveCount(0);
+      await expect(
+        host.getByRole("button", { name: "Pause preview" }),
+      ).toBeEnabled();
+      await host.getByRole("button", { name: "Pause preview" }).click();
+      await expect(preview).toHaveAttribute("data-preview-phase", "paused");
+      await expect(play).toBeEnabled();
+      await expect(spinner).toHaveCount(0);
+      await play.click();
+      await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+      await host.locator("video").evaluate((video) => {
+        video.dispatchEvent(new Event("ended"));
+      });
+      await expect(preview).toHaveAttribute("data-preview-phase", "ended");
+      const replay = host.getByRole("button", { name: "Replay preview" });
+      await expect(replay).toBeEnabled();
+      await expect(spinner).toHaveCount(0);
+      await replay.click();
+      await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+    } finally {
+      releaseMetadata();
+      releaseMedia();
+    }
+  });
+}
 test("missing trailers and playback failures leave the catalog usable", async ({
   page,
 }) => {
@@ -490,8 +594,18 @@ test("missing trailers and playback failures leave the catalog usable", async ({
   await expect(page.getByText("No Plex preview available")).toBeVisible({
     timeout: 10000,
   });
+  await expect(
+    page.locator(".hero").getByRole("button", { name: "Play preview" }),
+  ).toBeDisabled();
+  await expect(page.locator(".hero .preview-spinner")).toHaveCount(0);
   await page.getByRole("button", { name: "More info" }).click();
-  await expect(page.getByRole("dialog")).toContainText("First Light");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("First Light");
+  await expect(dialog).toContainText("No Plex preview available");
+  await expect(
+    dialog.getByRole("button", { name: "Play preview" }),
+  ).toBeDisabled();
+  await expect(dialog.locator(".preview-spinner")).toHaveCount(0);
   await page.keyboard.press("Escape");
 });
 test("failed direct and HLS streams fall back to artwork", async ({ page }) => {
@@ -506,10 +620,29 @@ test("failed direct and HLS streams fall back to artwork", async ({ page }) => {
     await page.locator("video").evaluate((v) => v.hasAttribute("src")),
   ).toBe(false);
   await expect(page.locator(".hero-background img")).toBeVisible();
+  const retry = page
+    .locator(".hero")
+    .getByRole("button", { name: "Retry preview" });
+  await expect(retry).toBeEnabled();
+  await expect(page.locator(".hero .preview-spinner")).toHaveCount(0);
   await page.getByLabel("Search movies").fill("Third");
   await expect(
     recentCards(page).filter({ hasText: "Third Shore" }),
   ).toBeVisible();
+  await page.route(
+    (url) => url.pathname === "/plex/library/parts/1/trailer.webm",
+    async (route) =>
+      route.fulfill({
+        body: await readFile("tests/fixtures/preview.webm"),
+        contentType: "video/webm",
+      }),
+  );
+  await retry.click();
+  await expect(page.locator(".hero [data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  await expect(page.locator(".hero .preview-spinner")).toHaveCount(0);
 });
 test("does not send a token to external HLS playlist resources", async ({
   page,

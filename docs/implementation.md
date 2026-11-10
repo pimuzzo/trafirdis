@@ -70,3 +70,9 @@ These are scope and acceptance decisions; they introduce no application behavior
 The hero starts muted and keeps the user's mute/unmute choice across Surprise me and pause/resume, settings and tab visibility restarts. It reuses the existing preview audio preference and one video element while each movie change cancels and replaces the old stream. Muting again also carries over to the next suggestion.
 
 The preference stays in memory for the mounted hero preview. Opening details removes that preview, so returning starts muted again; reloading also starts muted. Browser denial of unmuted autoplay retains the source and sound preference for Play preview. This adds no storage, dependency or Plex operation.
+
+## Preview loading controls
+
+Both preview surfaces show a small amber spinner inside Finding your preview while waiting, discovering or loading media. It replaces the status dot and respects reduced-motion preferences. Artwork remains visible until playback starts; the text status is announced politely.
+
+Play is disabled during loading and when Plex has no playable trailer resource. It remains available to resume a pause, retry a failure, replay an ended trailer or start a browser-blocked source directly from a user gesture. Tests hold synthetic metadata and media responses to verify loading controls on the hero and details, and verify missing trailers, retry recovery and existing autoplay/audio behavior. No playback transport, Plex operation or dependency changes.
