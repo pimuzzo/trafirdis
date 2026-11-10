@@ -61,4 +61,15 @@ describe("catalog", () => {
       ),
     ).toBe(false);
   });
+  it("can hide the unwatched section without removing genres", () => {
+    const m = movie();
+    expect(groupMovies([m]).some((r) => r.title === "Unwatched Movies")).toBe(
+      true,
+    );
+    const rails = groupMovies([m], [], false);
+    expect(rails.some((r) => r.title === "Unwatched Movies")).toBe(false);
+    expect(rails.find((r) => r.title === "Drama")?.movies).toEqual([m]);
+    const recent = rails.find((r) => r.title === "Recently Added");
+    expect(recent?.movies).toEqual([m]);
+  });
 });

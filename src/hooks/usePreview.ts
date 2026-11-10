@@ -11,6 +11,7 @@ export function usePreview(
   retry: number,
   onMuteChange?: (muted: boolean) => void,
   delay = 1500,
+  mutePreference?: RefObject<boolean>,
 ) {
   const [report, setReport] = useState<TrailerReport>({
     movieId,
@@ -32,8 +33,8 @@ export function usePreview(
       setReport(latest);
       service?.report(latest);
     };
-    video.muted = true;
-    onMuteChange?.(true);
+    video.muted = mutePreference?.current ?? true;
+    onMuteChange?.(video.muted);
     releaseVideo(video);
     publish({});
     if (!enabled || !service)
@@ -88,7 +89,11 @@ export function usePreview(
               attempt,
               service.client,
               controller.signal,
-              () => publish({ phase: "resolved", urlResolved: true }),
+              () =>
+                publish({
+                  phase: latest.phase === "blocked" ? "blocked" : "resolved",
+                  urlResolved: true,
+                }),
               () =>
                 publish({
                   phase: "playing",
@@ -140,7 +145,16 @@ export function usePreview(
       controller.abort();
       releaseVideo(video);
     };
-  }, [movieId, service, enabled, retry, delay, videoRef, onMuteChange]);
+  }, [
+    movieId,
+    service,
+    enabled,
+    retry,
+    delay,
+    videoRef,
+    onMuteChange,
+    mutePreference,
+  ]);
   // Never render a previous movie's successful playback while React runs cleanup.
   return report.movieId === movieId
     ? report

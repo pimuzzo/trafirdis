@@ -457,15 +457,18 @@ Implement:
 
 ## 11. Future Enhancements
 
-The following features are explicitly outside the initial MVP:
+Scope decisions confirmed by the maintainer on 2026-11-10:
+
+- **Pick for me / random movie discovery: accepted as complete.** The hero's Surprise me action and Open in Plex cover this use case. Its current unwatched-first selection from the selected library is accepted; a separate filter-aware picker is no longer required.
+- **Shortlist: removed from planned scope.** Unwatched combined with Recently Added is the accepted candidate view for the evening. No dedicated temporary or shared shortlist is planned.
+
+These decisions supersede earlier proposals for these two features. The remaining ideas below were outside the original MVP; delivered follow-ups are recorded in [the implementation record](implementation.md):
 
 - iPad-optimized touch interactions.
 - Progressive Web App installation.
 - TMDB trailer fallback.
 - YouTube trailer integration.
 - Personalized recommendations.
-- Shared movie shortlist.
-- Random movie discovery.
 - Custom genre collections.
 - Multiple Plex users.
 - TV remote control.

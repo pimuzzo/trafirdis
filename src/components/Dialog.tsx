@@ -1,15 +1,22 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  type ReactNode,
+  type KeyboardEventHandler,
+} from "react";
 import { Icon } from "./Icon";
 export function Dialog({
   title,
   onClose,
   children,
   className = "",
+  onKeyDown,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  onKeyDown?: KeyboardEventHandler<HTMLDialogElement>;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -29,6 +36,7 @@ export function Dialog({
       ref={ref}
       className={`dialog ${className}`}
       aria-label={title}
+      onKeyDown={onKeyDown}
       onCancel={(e) => {
         e.preventDefault();
         onClose();

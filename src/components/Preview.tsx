@@ -7,14 +7,17 @@ export function Preview({
   movieId,
   enabled = true,
   compact = false,
+  preserveMute = false,
 }: {
   service: TrailerService | null;
   movieId: string;
   enabled?: boolean;
   compact?: boolean;
+  preserveMute?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
+  const mutePreference = useRef(true);
   const [visible, setVisible] = useState(false);
   const [pageVisible, setPageVisible] = useState(!document.hidden);
   const [retry, setRetry] = useState(0);
@@ -34,10 +37,10 @@ export function Preview({
     };
   }, []);
   useEffect(() => {
-    setMuted(true);
+    setMuted(preserveMute ? mutePreference.current : true);
     setPaused(false);
     setRetry(0);
-  }, [movieId]);
+  }, [movieId, preserveMute]);
   const report = usePreview(
     video,
     service,
@@ -45,6 +48,8 @@ export function Preview({
     enabled && visible && pageVisible && !paused,
     retry,
     setMuted,
+    undefined,
+    preserveMute ? mutePreference : undefined,
   );
   const playing = report.phase === "playing";
   const busy = [
@@ -54,6 +59,20 @@ export function Preview({
     "resolving",
     "resolved",
   ].includes(report.phase);
+  const loading =
+    Boolean(service) && busy && enabled && !paused && visible && pageVisible;
+  const canControl =
+    enabled &&
+    visible &&
+    pageVisible &&
+    ["playing", "paused", "ended", "blocked", "error"].includes(report.phase);
+  const actionLabel = playing
+    ? "Pause preview"
+    : report.phase === "error"
+      ? "Retry preview"
+      : report.phase === "ended"
+        ? "Replay preview"
+        : "Play preview";
   const label = !service
     ? "Previews are available with your Plex library"
     : report.phase === "playing"
@@ -80,8 +99,11 @@ export function Preview({
       <video
         ref={video}
         className={playing ? "preview-video is-playing" : "preview-video"}
-        muted
-        onVolumeChange={(event) => setMuted(event.currentTarget.muted)}
+        muted={muted}
+        onVolumeChange={(event) => {
+          mutePreference.current = event.currentTarget.muted;
+          setMuted(event.currentTarget.muted);
+        }}
         playsInline
         preload="none"
         aria-label="Movie trailer preview"
@@ -90,15 +112,20 @@ export function Preview({
         <span
           className={`preview-state ${playing ? "is-live" : ""}`}
           title={report.reason}
+          aria-live="polite"
         >
-          <span className="status-dot" />
+          <span
+            className={loading ? "preview-spinner" : "status-dot"}
+            aria-hidden="true"
+          />
           {label}
         </span>
         {service && (
           <>
             <button
               className="icon-button"
-              aria-label={playing ? "Pause preview" : "Play preview"}
+              aria-label={actionLabel}
+              disabled={!canControl}
               onClick={() => {
                 if (report.phase === "blocked") {
                   void video.current?.play().catch(() => {});
@@ -121,6 +148,7 @@ export function Preview({
               onClick={() => {
                 if (video.current) {
                   video.current.muted = !video.current.muted;
+                  mutePreference.current = video.current.muted;
                   setMuted(video.current.muted);
                 }
               }}

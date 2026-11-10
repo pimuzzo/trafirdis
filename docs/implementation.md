@@ -33,3 +33,46 @@ After the MVP merge, added runtime opt-in diagnostics for Docker and production 
 Diagnostics can search the loaded library, inspect at most eight fresh metadata records sequentially, cancel pending work, and test a title outside catalog filters. Missing metadata, request failures, unavailable resources, autoplay denial and playback failures remain distinct. Rechecks and new preview attempts clear stale success; pausing preserves genuine observations. Downloaded reports use an explicit allowlist of numeric IDs, states and fixed error codes, excluding titles, credentials, addresses and raw error text. No additional provider, database, dependency or server write was introduced.
 
 The maintainer has confirmed browsing and previews on the real server with Chrome/Docker. Automated tests continue to use synthetic local Plex responses; full provider/codec, session-cleanup and deep-link acceptance remains pending. GitHub Actions runs the expanded unit, browser and Docker suites for this follow-up.
+
+## Category navigation follow-up
+
+The existing movie-details popup now supports previous/next navigation within the opening category, with a position counter, keyboard arrows and horizontal touch swipes outside the player and controls. The opening list is captured so navigation keeps its order and active filters; category ends do not wrap. The original popup restores focus and page position on close. Movie changes reuse the existing preview lifecycle, cancel obsolete work and retain its muted autoplay behavior.
+
+This change extends the existing details popup. The home hero, playback/audio policy and Plex API behavior are preserved. Previews are confined to the hero and opened details. Adjacent metadata/video preloading and a broader mobile layout redesign are deferred. No dependencies, backend services or new Plex operations were added.
+
+## Browsing polish follow-up
+
+The movie-library selector remembers an explicit choice in browser local storage, scoped to the server's public identity (or configured origin when the identity is unavailable). Preferences are checked against the current account's accessible sections before loading movies, with a safe fallback when a library disappears. Storage failures preserve in-memory switching. No credentials or movie catalog are persisted with the preference.
+
+The search field groups its icon and input under one focus outline, with separate space for the shortcut badge. A randomly featured movie stays stable across hover, keyboard focus, local filtering, details navigation and metadata refreshes. A new page or library gets a fresh choice; diagnostics can explicitly select a test film. The redundant My library navigation entry was removed; Discover, Unwatched, search and all filters retain category rails; empty categories are omitted. The floating player and its visibility/selection orchestration were removed, so focusing a lower rail does not initiate another stream.
+
+## Featured discovery follow-up
+
+The hero omits the decorative index and adds Surprise me. Initial and explicit random selections share an unwatched-first pool, with watched films as the fallback when no unwatched titles remain. The current film is excluded when an eligible alternative exists; a single-candidate pool disables the action. Updated Plex watch metadata revalidates the pool, while ordinary browsing preserves the chosen film. Advanced diagnostics retain explicit movie selection.
+
+The Unwatched view keeps genre and other category rails, but omits its redundant Unwatched Movies section. Returning to Discover restores that section when applicable. Existing trailer discovery, authentication and playback mechanisms are unchanged.
+
+## Details audio preference
+
+Details keep the user's mute/unmute choice in memory while the popup remains open, including previous/next navigation and pause/resume. The popup reuses one video element across films; stream cancellation and cleanup still run for every movie change. Closing and reopening details starts a fresh muted session. The subsequent hero audio preference change is recorded below.
+
+Autoplay denial retains the selected audio state and loaded source for an explicit Play preview gesture. Later metadata cannot overwrite the blocked phase; waiting for user input does not expire the source, while an actual manual playback retry still has the normal startup timeout. No preference is persisted and no Plex operation or authentication behavior changes.
+
+## Accepted scope decisions — 2026-11-10
+
+- **Pick for me: complete by acceptance.** Surprise me in the hero, followed by Open in Plex, satisfies the maintainer's discovery use case. The existing unwatched-first, full-selected-library behavior is accepted instead of a separate filter-aware picker.
+- **Shortlist: removed from planned work.** The maintainer uses Unwatched → Recently Added to review candidates for the evening. No separate temporary or shared candidate list is required.
+
+These are scope and acceptance decisions; they introduce no application behavior or storage changes.
+
+## Hero audio preference
+
+The hero starts muted and keeps the user's mute/unmute choice across Surprise me and pause/resume, settings and tab visibility restarts. It reuses the existing preview audio preference and one video element while each movie change cancels and replaces the old stream. Muting again also carries over to the next suggestion.
+
+The preference stays in memory for the mounted hero preview. Opening details removes that preview, so returning starts muted again; reloading also starts muted. Browser denial of unmuted autoplay retains the source and sound preference for Play preview. This adds no storage, dependency or Plex operation.
+
+## Preview loading controls
+
+Both preview surfaces show a small amber spinner inside Finding your preview while waiting, discovering or loading media. It replaces the status dot and respects reduced-motion preferences. Artwork remains visible until playback starts; the text status is announced politely.
+
+Play is disabled during loading and when Plex has no playable trailer resource. It remains available to resume a pause, retry a failure, replay an ended trailer or start a browser-blocked source directly from a user gesture. Tests hold synthetic metadata and media responses to verify loading controls on the hero and details, and verify missing trailers, retry recovery and existing autoplay/audio behavior. No playback transport, Plex operation or dependency changes.

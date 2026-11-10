@@ -1,5 +1,5 @@
 import { diagnosticsEnabled, serverLabel } from "../config";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PlexClient, errorMessage } from "../plex/client";
 import {
@@ -8,17 +8,19 @@ import {
   groupMovies,
   type Movie,
   type Server,
+  type Rail,
 } from "../domain/movie";
 import { sampleMovies } from "../sample";
 import { Brand, Icon } from "./Icon";
-import { MovieRail, MovieCard } from "./MovieRail";
+import { MovieRail } from "./MovieRail";
 import { MovieDetails } from "./MovieDetails";
 import { Filters } from "./Filters";
 import { Dialog } from "./Dialog";
 import { Hero } from "./Hero";
-import { PreviewDock } from "./PreviewDock";
 import { TrailerService } from "../trailer/service";
 import { Preview } from "./Preview";
+import { useMovieLibrary } from "../hooks/useMovieLibrary";
+import { useFeaturedMovie } from "../hooks/useFeaturedMovie";
 const Diagnostics = diagnosticsEnabled
   ? lazy(() => import("./Diagnostics"))
   : null;
@@ -35,9 +37,6 @@ export default function Catalog({
     [client],
   );
   const [diagnostics, setDiagnostics] = useState(false);
-  const heroHost = useRef<HTMLDivElement>(null);
-  const [heroVisible, setHeroVisible] = useState(true);
-  const [dockDismissed, setDockDismissed] = useState(false);
   useEffect(() => {
     const shortcut = (e: KeyboardEvent) => {
       if (
@@ -55,14 +54,13 @@ export default function Catalog({
     document.addEventListener("keydown", shortcut);
     return () => document.removeEventListener("keydown", shortcut);
   }, []);
-  const [library, setLibrary] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState("");
-  const [details, setDetails] = useState<Movie | null>(null);
+  const [details, setDetails] = useState<{ rail: Rail; index: number } | null>(
+    null,
+  );
   const [settings, setSettings] = useState(false);
-  const [view, setView] = useState<"discover" | "library">("discover");
-  const [gridLimit, setGridLimit] = useState(40);
   const server = useQuery({
     queryKey: ["server"],
     queryFn: ({ signal }) => client!.server(signal),
@@ -73,7 +71,13 @@ export default function Catalog({
     queryFn: ({ signal }) => client!.libraries(signal),
     enabled: !sample,
   });
-  const libraryId = library || libraries.data?.[0]?.id;
+  const serverKey = server.data
+    ? server.data.machineIdentifier || serverLabel
+    : undefined;
+  const { libraryId, selectLibrary } = useMovieLibrary(
+    serverKey,
+    libraries.data,
+  );
   const catalog = useQuery({
     queryKey: ["movies", libraryId],
     queryFn: ({ signal }) => client!.movies(libraryId!, signal),
@@ -84,22 +88,12 @@ export default function Catalog({
     () => filterMovies(movies, filters),
     [movies, filters],
   );
-  const active = visible.find((m) => m.id === selected) || visible[0];
-  const hasMovie = Boolean(active);
-  useEffect(() => {
-    const element = heroHost.current;
-    if (!element) return;
-    const observer = new IntersectionObserver(
-      (entries) => setHeroVisible((entries[0]?.intersectionRatio || 0) >= 0.15),
-      { threshold: 0.15 },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [hasMovie]);
-  const dockMovie =
-    active && selected && !heroVisible && !dockDismissed && !details
-      ? active
-      : null;
+  const active = visible.find((m) => m.id === selected);
+  const featuredState = useFeaturedMovie(
+    movies,
+    sample ? "sample" : `${serverKey || ""}:${libraryId || ""}`,
+  );
+  const { movie: featured, selectFeatured } = featuredState;
   const rails = useMemo(
     () =>
       groupMovies(
@@ -111,8 +105,9 @@ export default function Catalog({
           .split(",")
           .map((s: string) => s.trim())
           .filter(Boolean),
+        filters.watched !== "unwatched",
       ),
-    [visible],
+    [visible, filters.watched],
   );
   const connectedServer: Server | undefined = sample
     ? { name: "Sample library" }
@@ -120,17 +115,20 @@ export default function Catalog({
   const error = server.error || libraries.error || catalog.error;
   const loading =
     !sample &&
-    (libraries.isPending || (Boolean(libraryId) && catalog.isPending));
+    (server.isPending ||
+      libraries.isPending ||
+      (Boolean(libraryId) && catalog.isPending));
   const activeFilters = Object.entries(filters).filter(([, v]) =>
     Boolean(v),
   ).length;
   const select = (movie: Movie) => {
     setSelected(movie.id);
-    setDockDismissed(false);
   };
-  const showDetails = (movie: Movie) => {
+  const showDetails = (movie: Movie, rail: Rail) => {
+    const index = rail.movies.findIndex((item) => item.id === movie.id);
+    if (index < 0) return;
     setSelected(movie.id);
-    setDetails(movie);
+    setDetails({ rail, index });
   };
   const refresh = () => {
     trailers?.clear();
@@ -150,7 +148,6 @@ export default function Catalog({
           aria-label="Trafirdis home"
           onClick={(e) => {
             e.preventDefault();
-            setView("discover");
             setFilters(emptyFilters);
             window.scrollTo({ top: 0, behavior: "instant" });
           }}
@@ -159,26 +156,12 @@ export default function Catalog({
         </a>
         <nav aria-label="Main navigation">
           <button
-            className={
-              view === "discover" && !filters.watched
-                ? "nav-link active"
-                : "nav-link"
-            }
+            className={!filters.watched ? "nav-link active" : "nav-link"}
             onClick={() => {
-              setView("discover");
               setFilters(emptyFilters);
             }}
           >
             Discover
-          </button>
-          <button
-            className={view === "library" ? "nav-link active" : "nav-link"}
-            onClick={() => {
-              setView("library");
-              document.getElementById("catalog")?.scrollIntoView();
-            }}
-          >
-            My library
           </button>
           <button
             className={
@@ -194,17 +177,20 @@ export default function Catalog({
         </nav>
         <div className="header-actions">
           <label className="search">
-            <Icon name="search" size={18} />
-            <input
-              type="search"
-              placeholder="Find a film..."
-              aria-label="Search movies"
-              value={filters.search}
-              onChange={(e) => {
-                setFilters({ ...filters, search: e.target.value });
-              }}
-            />
-            <kbd>/</kbd>
+            <span className="search-field">
+              <Icon name="search" size={18} />
+              <input
+                type="search"
+                placeholder="Find a film..."
+                aria-label="Search movies"
+                aria-keyshortcuts="/"
+                value={filters.search}
+                onChange={(e) => {
+                  setFilters({ ...filters, search: e.target.value });
+                }}
+              />
+            </span>
+            <kbd aria-hidden="true">/</kbd>
           </label>
           <button
             className="icon-button"
@@ -227,19 +213,20 @@ export default function Catalog({
           </button>
         </div>
       )}
-      {active && (
-        <div ref={heroHost}>
-          <Hero
-            movie={active}
-            client={client}
-            trailers={trailers}
-            connectedServer={connectedServer}
-            total={visible.length}
-            previewVisible={!details && !dockMovie}
-            previewEnabled={!settings && !diagnostics}
-            onDetails={showDetails}
-          />
-        </div>
+      {featured && (
+        <Hero
+          movie={featured}
+          client={client}
+          trailers={trailers}
+          connectedServer={connectedServer}
+          onRandomize={featuredState.randomizeFeatured}
+          canRandomize={featuredState.canRandomize}
+          previewVisible={!details}
+          previewEnabled={!settings && !diagnostics}
+          onDetails={(movie) =>
+            showDetails(movie, { title: "Movie library", movies })
+          }
+        />
       )}
       <main id="catalog" className="catalog" tabIndex={-1}>
         <div className="catalog-toolbar">
@@ -250,9 +237,7 @@ export default function Catalog({
             <h2>
               {filters.search
                 ? "Your search results"
-                : view === "library"
-                  ? "Your film collection"
-                  : "Find your next great watch"}
+                : "Find your next great watch"}
               <span className="catalog-count">{visible.length} films</span>
             </h2>
           </div>
@@ -262,7 +247,7 @@ export default function Catalog({
                 aria-label="Movie library"
                 value={libraryId}
                 onChange={(e) => {
-                  setLibrary(e.target.value);
+                  selectLibrary(e.target.value);
                   setSelected("");
                   setFilters(emptyFilters);
                 }}
@@ -363,41 +348,16 @@ export default function Catalog({
               )}
             </div>
           )}
-        {view === "library" || activeFilters > 0 ? (
-          <>
-            <div className="movie-grid" data-rail aria-label="Movie results">
-              {visible.slice(0, gridLimit).map((m) => (
-                <MovieCard
-                  key={m.id}
-                  movie={m}
-                  client={client}
-                  selected={active?.id === m.id}
-                  onSelect={select}
-                  onDetails={showDetails}
-                />
-              ))}
-            </div>
-            {visible.length > gridLimit && (
-              <button
-                className="button secondary grid-more"
-                onClick={() => setGridLimit(gridLimit + 40)}
-              >
-                Show more films
-              </button>
-            )}
-          </>
-        ) : (
-          rails.map((rail) => (
-            <MovieRail
-              key={`${libraryId}-${rail.title}`}
-              rail={rail}
-              client={client}
-              selected={active?.id}
-              onSelect={select}
-              onDetails={showDetails}
-            />
-          ))
-        )}
+        {rails.map((rail) => (
+          <MovieRail
+            key={`${libraryId}-${rail.title}`}
+            rail={rail}
+            client={client}
+            selected={active?.id}
+            onSelect={select}
+            onDetails={(movie) => showDetails(movie, rail)}
+          />
+        ))}
       </main>
       <footer className="app-footer">
         <Brand />
@@ -410,29 +370,27 @@ export default function Catalog({
           <span className="footer-separator">/</span>Made for your movie nights
         </span>
       </footer>
-      {dockMovie && (
-        <PreviewDock
-          movie={dockMovie}
-          client={client}
-          service={trailers}
-          enabled={!settings && !diagnostics}
-          onClose={() => setDockDismissed(true)}
-          onDetails={showDetails}
-        />
-      )}
       {details && (
         <MovieDetails
-          movie={details}
+          movie={details.rail.movies[details.index]}
+          rail={details.rail}
+          index={details.index}
+          onNavigate={(index) => {
+            if (index >= 0 && index < details.rail.movies.length) {
+              setSelected(details.rail.movies[index].id);
+              setDetails({ ...details, index });
+            }
+          }}
           client={client}
           server={connectedServer}
           onClose={() => setDetails(null)}
           preview={
             <Preview
-              key={details.id}
               service={trailers}
-              movieId={details.id}
+              movieId={details.rail.movies[details.index].id}
               enabled={!settings && !diagnostics}
               compact
+              preserveMute
             />
           }
         />
@@ -443,12 +401,12 @@ export default function Catalog({
         >
           <Diagnostics
             movies={movies}
-            selectedId={active?.id}
+            selectedId={active?.id || featured?.id}
             service={trailers}
             onClose={() => setDiagnostics(false)}
             onTest={(movie) => {
               setFilters(emptyFilters);
-              setView("discover");
+              selectFeatured(movie.id);
               setSelected(movie.id);
               setDetails(null);
               setDiagnostics(false);

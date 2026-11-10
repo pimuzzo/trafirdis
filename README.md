@@ -107,12 +107,12 @@ The intended hosted repository name is `trafirdis`. Repository settings and Git 
 
 ## Configuration
 
-| Setting              | Location                              | Purpose                                                                                                                                  |
-| -------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `PLEX_SERVER_URL`    | `.env.local`                          | Plex HTTP(S) origin, including port. No credentials, path, or query. Used by the Vite proxy or Docker runtime.                           |
-| `VITE_SECTION_ORDER` | `.env.local`                          | Comma-separated rail titles, followed by remaining genres alphabetically. Default: `Recently Added,Continue Watching,Unwatched Movies`.  |
-| Plex token           | Plex sign-in or advanced manual entry | A verified server-specific token is stored in `sessionStorage`. Cleared on disconnect. Manual entry also supports an in-memory fallback. |
-| Movie library        | Catalog library selector              | Appears when the account has more than one movie library.                                                                                |
+| Setting              | Location                              | Purpose                                                                                                                                                |
+| -------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PLEX_SERVER_URL`    | `.env.local`                          | Plex HTTP(S) origin, including port. No credentials, path, or query. Used by the Vite proxy or Docker runtime.                                         |
+| `VITE_SECTION_ORDER` | `.env.local`                          | Comma-separated rail titles, followed by remaining genres alphabetically. Default: `Recently Added,Continue Watching,Unwatched Movies`.                |
+| Plex token           | Plex sign-in or advanced manual entry | A verified server-specific token is stored in `sessionStorage`. Cleared on disconnect. Manual entry also supports an in-memory fallback.               |
+| Movie library        | Catalog library selector              | Appears with multiple movie libraries. The choice is remembered per server in this browser; an unavailable choice falls back to an accessible library. |
 
 Never create a `VITE_PLEX_TOKEN` setting: Vite embeds `VITE_` variables in public JavaScript. `.env.local` is ignored by Git. The development build embeds only the server origin for display; Docker supplies a public runtime override. Authentication is entered in the browser in both cases.
 
@@ -132,12 +132,16 @@ Disconnect clears local access and catalog caches; it does not revoke Plex’s A
 
 ## Browsing
 
-- Discover shows a cinematic hero and rails derived from actual Plex genre tags. Recently Added, Continue Watching, and Unwatched Movies use Plex's timestamps and watch metadata.
-- Hover or keyboard focus selects a film and updates the hero. When browsing below the hero, a small dismissible preview panel keeps the selected film and trailer in view. Enter/click opens details; Escape closes the modal and restores focus. Arrow keys move between posters and rails; Home/End move within the rendered rail.
+- Discover shows a cinematic hero and rails derived from actual Plex genre tags. Recently Added, Continue Watching, and Unwatched Movies use Plex's timestamps and watch metadata. The Unwatched tab filters the same categories instead of changing the layout, and hides the redundant Unwatched Movies section.
+- Discover groups the library into categories. The featured movie is picked randomly from unwatched films when any are available, otherwise from watched films. It stays stable while hovering, moving keyboard focus, searching, filtering or browsing details. **Surprise me** makes another pick using the same rule and avoids the current film when an alternative exists. The button is disabled when there is no other film to suggest. An explicit diagnostic Test preview can select a different featured movie. Hover reveals card actions; keyboard focus selects a poster without starting another player. Enter/click opens details; Escape closes the modal and restores focus. Arrow keys move between posters and rails; Home/End move within the rendered rail.
+- Inside details, Previous/Next movie buttons and a position counter follow the category you opened. Left/Right keys and horizontal swipes across the details also navigate; swipes over the trailer and controls are ignored. Navigation respects category order and current filters, stops at both ends, and includes films without trailers. Opening from the hero uses the full movie library; opening from a category uses its currently filtered movies. Closing preserves your page position and filters.
 - Search (`/` shortcut) and genre, year, watch status, runtime, and rating filters combine locally. Typing does not request Plex metadata again. Rating uses Plex's audience rating when present, otherwise its primary rating.
 - Rails support trackpads, mouse wheels, scroll buttons, and native touch scrolling. Vertical wheel input scrolls the rail while there is room; at the ends it continues down the page. Ctrl-wheel remains available for zoom.
-- Large rails initially render 30 posters; Show more reveals subsequent batches. The full library view renders 40 at a time. Catalog retrieval itself is paginated and loads the complete selected library.
+- Categories remain visible during search and every filter combination, including Unwatched. Empty categories are omitted. Each rail initially renders 30 posters; Show more reveals subsequent batches. Catalog retrieval itself is paginated and loads the complete selected library.
 - Open in Plex uses the server's machine identifier and the movie's metadata key. The details panel also provides Copy title if a particular Plex Web version cannot navigate to the film. With no machine identifier, the link opens Plex Web's home.
+
+- **Pick for me** is fulfilled by **Surprise me → Open in Plex** in the hero, using the existing unwatched-first selection from the selected library.
+- A dedicated **Shortlist** is not planned. Use **Unwatched → Recently Added** as the list of candidates for the evening.
 
 ## How previews work
 
@@ -146,8 +150,9 @@ Disconnect clears local access and catalog caches; it does not revoke Plex’s A
 3. Supported, local Plex media parts are attempted in the native HTML5 video element. `canPlayType` is a capability hint; it is never recorded as playback success.
 4. For indirect assets or incompatible native formats, Trafirdis requests **Plex Media Server's own HLS streaming endpoint** using the extra's key, never the parent movie's key. Native HLS is used where available. Otherwise a dynamically imported `hls.js` implementation supplies Media Source Extensions playback. If a native HLS attempt fails, an MSE fallback is available.
 5. Only a loaded media/manifest event establishes URL resolution; only an actual `playing` event establishes playback success. Metadata discovery and constructing a candidate URL do neither.
-6. One video element is active. Switching films, opening an occluding dialog, hiding the tab, leaving the visible preview area, pausing, or unmounting aborts work and unloads the stream. Details use the same preview mechanism in their own visible surface. Selection changes reset audio to muted. Previews do not loop.
-7. Startup or buffering stalls time out after 12 seconds. A failed candidate advances to the next candidate, then returns to static artwork. Autoplay denial keeps the source ready for the explicit Play preview button. Failures never disable catalog navigation.
+6. One video element is active. Switching films, opening an occluding dialog, hiding the tab, leaving the visible preview area, pausing, or unmounting aborts work and unloads the stream. Details use the same preview mechanism in their own visible surface. The hero starts muted and keeps the user's mute/unmute choice across Surprise me, pausing, settings and tab visibility changes while its preview remains mounted. Opening details replaces the hero preview; returning to the hero starts muted again. An opened details popup starts muted and keeps the user's mute/unmute choice when navigating between films, pausing or resuming. Closing and reopening details resets that choice. If a browser blocks unmuted autoplay, Play preview starts the loaded source directly from a tap. Previews do not loop.
+7. While finding/loading a preview, a small spinner appears inside the status badge and Play is disabled. Play stays disabled when no playable trailer is available. Errors offer Retry preview; browser autoplay denial offers Play preview; completed trailers offer Replay preview. The loading indicator respects reduced-motion preferences.
+8. Startup or buffering stalls time out after 12 seconds. A failed candidate advances to the next candidate, then returns to static artwork. Autoplay denial keeps the source ready for the explicit Play preview button. Failures never disable catalog navigation.
 
 Trafirdis never sends timeline, scrobble, playback-progress, play-queue, library-edit, or metadata-refresh calls. Streaming may create a temporary PMS transcoder session; cleanup makes a best-effort stop call scoped to that preview session. This uses Plex's existing streaming capabilities, not a custom transcoder or full-movie playback engine.
 
