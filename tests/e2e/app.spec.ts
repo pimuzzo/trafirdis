@@ -56,10 +56,14 @@ async function mockPlex(
     trailer?: "direct" | "hls" | "missing" | "broken" | "external";
     delayed?: boolean;
     allWatched?: boolean;
+    expiringExtras?: boolean;
     libraries?: { key: string; title: string }[];
   } = {},
 ) {
   const requests: { path: string; method: string; token?: string }[] = [];
+  const validExtras = new Set<string>();
+  const streamKeys = new Map<string, string>();
+  let extraVersion = 0;
   const fulfill = (route: Route, MediaContainer: unknown) =>
     route.fulfill({ json: { MediaContainer } });
   await page.route("http://127.0.0.1:5175/plex/**", async (route) => {
@@ -103,6 +107,10 @@ async function mockPlex(
     if (/^\/library\/metadata\/\d+$/.test(path)) {
       const id = path.split("/").at(-1)!;
       const film = films.find((f) => f.ratingKey === id)!;
+      const extraId = options.expiringExtras
+        ? `${id}00${++extraVersion}`
+        : `${id}00`;
+      validExtras.add(`/library/metadata/${extraId}`);
       if (options.delayed)
         await new Promise((resolve) => setTimeout(resolve, 100));
       return fulfill(route, {
@@ -115,8 +123,8 @@ async function mockPlex(
                   ? []
                   : [
                       {
-                        ratingKey: `${id}00`,
-                        key: `/library/metadata/${id}00`,
+                        ratingKey: extraId,
+                        key: `/library/metadata/${extraId}`,
                         subtype: "trailer",
                         type: "clip",
                         Media:
@@ -150,6 +158,12 @@ async function mockPlex(
             contentType: "video/webm",
           });
     if (path.endsWith("start.m3u8")) {
+      if (options.expiringExtras) {
+        const key = url.searchParams.get("path") || "";
+        if (!validExtras.has(key))
+          return route.fulfill({ status: 400, body: "Bad Request" });
+        streamKeys.set(url.searchParams.get("session") || "", key);
+      }
       if (options.trailer === "broken") return route.fulfill({ status: 404 });
       if (options.trailer === "external")
         return route.fulfill({
@@ -166,7 +180,15 @@ async function mockPlex(
         body: await readFile("tests/fixtures/segment-0.ts"),
         contentType: "video/mp2t",
       });
-    if (path.endsWith("/stop")) return route.fulfill({ status: 200, body: "" });
+    if (path.endsWith("/stop")) {
+      if (options.expiringExtras) {
+        const session = url.searchParams.get("session") || "";
+        validExtras.delete(streamKeys.get(session) || "");
+        streamKeys.delete(session);
+        return route.fulfill({ status: 404, body: "Not Found" });
+      }
+      return route.fulfill({ status: 200, body: "" });
+    }
     return route.fulfill({ status: 404 });
   });
   return requests;
@@ -482,6 +504,90 @@ test("plays Plex HLS through the lazy fallback in Chromium", async ({
     .poll(() => requests.some((r) => r.path.endsWith("/stop")))
     .toBe(true);
 });
+for (const surface of ["hero", "details"] as const) {
+  test(`${surface} reopens HLS with refreshed extras after releasing playback`, async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
+    await page.addInitScript(() => {
+      const original = HTMLMediaElement.prototype.canPlayType;
+      HTMLMediaElement.prototype.canPlayType = function (type) {
+        return type === "application/vnd.apple.mpegurl"
+          ? ""
+          : original.call(this, type);
+      };
+    });
+    const requests = await mockPlex(page, {
+      trailer: "hls",
+      expiringExtras: true,
+    });
+    const starts: { session: string; key: string }[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith("/start.m3u8"))
+        starts.push({
+          session: url.searchParams.get("session") || "",
+          key: url.searchParams.get("path") || "",
+        });
+    });
+    await connect(page);
+    const id = surface === "hero" ? "1" : "2";
+    const open = async () => {
+      if (surface === "details") await recentCards(page).nth(1).click();
+      else
+        await page.evaluate(() =>
+          window.scrollTo({ top: 0, behavior: "instant" }),
+        );
+    };
+    await open();
+    const host = page.locator(surface === "hero" ? ".hero" : ".details-dialog");
+    const preview = host.locator("[data-preview-phase]");
+    const playing = async () => {
+      await expect(preview).toHaveAttribute("data-preview-phase", "playing", {
+        timeout: 15000,
+      });
+      await expect(page.locator("video")).toHaveCount(1);
+    };
+    await playing();
+    for (let restart = 0; restart < 2; restart++) {
+      const previous = starts
+        .filter((s) => s.key.startsWith(`/library/metadata/${id}00`))
+        .at(-1)!;
+      const stopped = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return (
+          url.pathname.endsWith("/stop") &&
+          url.searchParams.get("session") === previous.session
+        );
+      });
+      if (surface === "details") {
+        await page.keyboard.press("Escape");
+        await expect(page.locator(".details-dialog")).toHaveCount(0);
+      } else {
+        await page.locator(".app-footer").scrollIntoViewIfNeeded();
+        await expect(preview).toHaveAttribute("data-preview-phase", "paused");
+        expect(
+          await host
+            .locator("video")
+            .evaluate((video) => video.hasAttribute("src")),
+        ).toBe(false);
+      }
+      expect((await stopped).status()).toBe(404);
+      await open();
+      await playing();
+      const current = starts
+        .filter((s) => s.key.startsWith(`/library/metadata/${id}00`))
+        .at(-1)!;
+      expect(current.session).not.toBe(previous.session);
+      expect(current.key).not.toBe(previous.key);
+      expect(
+        requests.filter(
+          (request) => request.path === `/library/metadata/${id}`,
+        ),
+      ).toHaveLength(restart + 2);
+    }
+  });
+}
 for (const surface of ["hero", "details"] as const) {
   test(`${surface} disables Play and shows status loading until media starts`, async ({
     page,

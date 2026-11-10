@@ -76,3 +76,11 @@ The preference stays in memory for the mounted hero preview. Opening details rem
 Both preview surfaces show a small amber spinner inside Finding your preview while waiting, discovering or loading media. It replaces the status dot and respects reduced-motion preferences. Artwork remains visible until playback starts; the text status is announced politely.
 
 Play is disabled during loading and when Plex has no playable trailer resource. It remains available to resume a pause, retry a failure, replay an ended trailer or start a browser-blocked source directly from a user gesture. Tests hold synthetic metadata and media responses to verify loading controls on the hero and details, and verify missing trailers, retry recovery and existing autoplay/audio behavior. No playback transport, Plex operation or dependency changes.
+
+## Trailer restart revalidation
+
+A maintainer report found that details reopen and hero scroll-away/return could fail after initial successful playback; a full page reload restored it. Playback previously reused five-minute cached extras, leaving it dependent on resource keys read before a stream stopped.
+
+Each actual start now re-reads extras from Plex with fresh discovery and no-store HTTP caching. The cache remains bounded for other callers; fresh failures never fall back to an older resource, and diagnostic observations remain independent. The existing startup delay, abort/generation guards, per-attempt sessions, native/HLS fallback, audio preferences and scoped best-effort cleanup are retained.
+
+Regression fixtures deliberately expire an extra after stop and return a generic 400 on reuse, plus a nonfatal 404 for cleanup. Tests repeat both reported HLS lifecycles in Chromium and through Docker/Nginx. These synthetic scenarios cover stale-resource handling; confirmation with the maintainer's actual trailers remains necessary. This change adds no dependency, storage, backend, provider or Plex operation.

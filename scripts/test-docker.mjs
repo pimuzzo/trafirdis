@@ -298,6 +298,24 @@ try {
     .getByRole("button", { name: "Disconnect and clear session" })
     .click();
   await page.getByText("Use a Plex token instead", { exact: true }).click();
+  // Keep the HLS restart regression on one deterministic playback transport.
+  await page.evaluate(() => {
+    const original = HTMLMediaElement.prototype.canPlayType;
+    HTMLMediaElement.prototype.canPlayType = function (type) {
+      return type === "application/vnd.apple.mpegurl"
+        ? ""
+        : original.call(this, type);
+    };
+  });
+  const hlsStarts = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/start.m3u8"))
+      hlsStarts.push({
+        session: url.searchParams.get("session"),
+        key: url.searchParams.get("path"),
+      });
+  });
   await page
     .getByLabel("Plex authentication token")
     .fill("docker-browser-hls-token");
@@ -318,6 +336,49 @@ try {
     true,
   );
   assert.deepEqual(errors, []);
+  let previousHls = hlsStarts.at(-1);
+  assert.ok(previousHls?.session);
+  const expectFreshHls = async () => {
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector("[data-preview-phase]")
+          ?.getAttribute("data-preview-phase") === "playing",
+      {},
+      { timeout: 15000 },
+    );
+    const current = hlsStarts.at(-1);
+    assert.ok(current?.session);
+    assert.notEqual(current.session, previousHls.session);
+    assert.notEqual(current.key, previousHls.key);
+    previousHls = current;
+    assert.equal(await page.locator("video").count(), 1);
+  };
+  for (let restart = 0; restart < 2; restart++) {
+    await page.getByRole("button", { name: "More info" }).click();
+    await expectFreshHls();
+    await page.keyboard.press("Escape");
+    await expectFreshHls();
+  }
+  await page.locator(".app-footer").scrollIntoViewIfNeeded();
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector(".hero [data-preview-phase]")
+        ?.getAttribute("data-preview-phase") === "paused",
+  );
+  assert.equal(
+    await page.locator("video").evaluate((video) => video.hasAttribute("src")),
+    false,
+  );
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await expectFreshHls();
+  assert.equal(new Set(hlsStarts.map((start) => start.session)).size, 6);
+  assert.equal(new Set(hlsStarts.map((start) => start.key)).size, 6);
+  assert.deepEqual(errors, []);
+  console.log(
+    "Docker HLS: repeated details reopen and hero scroll restart use fresh extras and sessions despite cleanup 404s.",
+  );
   // Exercise hosted authorization through the actual production SPA callback.
   await page.getByRole("button", { name: "Connection settings" }).click();
   await page

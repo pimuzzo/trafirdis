@@ -9,7 +9,13 @@ export class TrailerService {
     readonly client: PlexClient,
     private now: () => number = Date.now,
   ) {}
-  async discover(id: string, signal?: AbortSignal): Promise<Discovery> {
+  async discover(
+    id: string,
+    signal?: AbortSignal,
+    options: { fresh?: boolean } = {},
+  ): Promise<Discovery> {
+    // A new playback must not depend on keys cached before another stream stopped.
+    if (options.fresh) this.cache.delete(id);
     const cached = this.cache.get(id);
     if (cached && cached.expires > this.now()) {
       this.cache.delete(id);

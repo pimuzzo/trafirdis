@@ -22,7 +22,7 @@ All catalog calls are GET requests through `/plex`, targeting the configured PMS
 - `/`: server name, version, machine identifier.
 - `/library/sections`: accessible libraries; select movie libraries only.
 - `/library/sections/{id}/all?type=1&X-Plex-Container-Start=...&X-Plex-Container-Size=200`: paginated catalog. Total size can come from the JSON body or response header. Repeated pages are detected.
-- `/library/metadata/{id}?includeExtras=1`: lazy discovery for a stable selection or explicit diagnostic inspection.
+- `/library/metadata/{id}?includeExtras=1`: fresh, lazy discovery for each actual preview start after a stable selection, or explicit diagnostic inspection. Playback bypasses the discovery and browser HTTP caches; this is a read, not a Plex metadata refresh.
 - `/photo/:/transcode`: scaled artwork using a trusted relative metadata image key.
 - Local `/library/parts/...` keys: direct stream candidates. Indirect/third-party part URLs are not given directly to the browser.
 - `/video/:/transcode/universal/start.m3u8`: PMS-generated stream using the extra's metadata key, media/part index zero, HLS, server direct streaming enabled, direct play disabled, 720p/3 Mbps target, unique preview session identifier. PMS may remux or transcode; Trafirdis does neither itself.
@@ -44,7 +44,7 @@ No HEAD request is used as proof of playability. No video prefetch is performed 
 
 Native image and video elements cannot resend a proxy-injected authentication header when following a redirect. Both Vite and Docker preserve the original media query token on validated same-server redirects; Vite removes it before each upstream request. Relative locations resolve against the current resource. Header-only credentials remain in headers, and external redirects are rejected before returning any authenticated location. Regression tests include redirect chains and actual Chromium image/video decoding.
 
-Every preview restart resets the element and its audio control to muted, including pause/resume, settings and tab-visibility changes. The control also reads the element's actual muted state when toggled. Browser regression tests exercise all three restart paths.
+A newly mounted hero or details preview starts muted. Each mounted preview keeps the user's mute/unmute choice across movie changes and pause, settings or visibility restarts. Closing details resets the popup preference; returning creates a new muted hero preview. The control reads the element's actual muted state when toggled.
 
 ## Evidence and outstanding validation
 
@@ -69,3 +69,15 @@ The metadata inspection path still uses only `GET /library/metadata/{id}?include
 Reports preserve observations while previews are paused and reset them when a new check or playback attempt starts. Only media/manifest events establish resolution and only a `playing` event establishes playback. Failure codes distinguish missing trailers, unavailable resources, authentication, network, timeout, response, unsafe resource, autoplay and codec problems. A playback failure reports the last attempted candidate's failure, not a speculative diagnosis of the provider. HTTP status is included only when observed by the metadata API client; native media failures expose no such status.
 
 The versioned JSON export serializes an explicit allowlist of numeric movie IDs, known phases, booleans, fixed source/method/failure values and bounded HTTP statuses. Unknowns are null. It never serializes Plex payloads, titles, credentials, server addresses, URLs or free-text errors. The browser downloads it locally without clipboard access or a network upload. Docker tests verify both runtime modes and report downloads from the same production image.
+
+## Playback revalidation — 2026-11-10
+
+The maintainer observed successful playback once, followed by generic HTTP 400 responses from start.m3u8 after reopening details or scrolling away from and back to the hero. Reloading the page restored playback. Cleanup calls returned 404. These observations do not establish a PMS root cause or prove that cleanup caused the failure.
+
+The prior implementation reused discovered extra keys for five minutes across stopped streams. Playback now performs a fresh includeExtras read for each actual start, with no-store HTTP caching. Bounded discovery caching remains available for callers that allow reuse. Fresh discovery failures do not fall back to previously cached resources, and diagnostic observations remain independent. Session identifiers were already generated per attempt and remain distinct; the client identity remains stable.
+
+Stateful synthetic tests retire an extra resource after stop and reject stale starts with HTTP 400, while returning a nonfatal cleanup 404. Browser tests repeat popup reopen and hero scroll-away/return with actual HLS decoding. Docker exercises the same lifecycle through Nginx. These tests validate our handling of that compatibility scenario, not the cause or resolution on the maintainer's server.
+
+The [official PMS API](https://developer.plex.tv/pms/) documents metadata detail reads and request identity. [Python PlexAPI's stream URL implementation](https://github.com/pushingkarmaorg/python-plexapi/blob/master/plexapi/base.py) uses the playable item's key for universal streaming. Neither source guarantees that an extra key remains valid after teardown on every server/provider version. No new endpoint, provider, entitlement workaround or watch-history update is introduced. The existing best-effort legacy stop route remains; its 404 is not treated as a playback failure.
+
+Real-server acceptance must repeat the reported sequence using the same trailers and confirm a new includeExtras read precedes each restart. A persistent 400 after revalidation still requires server/provider-specific diagnosis; the generic HTML response contains no specific rejection reason.
