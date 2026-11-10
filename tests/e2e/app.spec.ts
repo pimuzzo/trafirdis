@@ -55,6 +55,7 @@ async function mockPlex(
     noLibraries?: boolean;
     trailer?: "direct" | "hls" | "missing" | "broken" | "external";
     delayed?: boolean;
+    allWatched?: boolean;
     libraries?: { key: string; title: string }[];
   } = {},
 ) {
@@ -88,7 +89,11 @@ async function mockPlex(
     if (/^\/library\/sections\/[12]\/all$/.test(path))
       return fulfill(route, {
         totalSize: options.empty ? 0 : films.length,
-        Metadata: options.empty ? [] : films,
+        Metadata: options.empty
+          ? []
+          : options.allWatched
+            ? films.map((film) => ({ ...film, viewCount: 1 }))
+            : films,
       });
     if (path.startsWith("/photo/"))
       return route.fulfill({
@@ -759,6 +764,14 @@ test("small screens have no horizontal overflow and dialogs stay usable", async 
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+  const surprise = page.getByRole("button", { name: "Surprise me" });
+  await expect(surprise).toBeVisible();
+  const bounds = await surprise.boundingBox();
+  const heroBounds = await page.locator(".hero").boundingBox();
+  expect(bounds!.height).toBeGreaterThanOrEqual(44);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(
+    heroBounds!.y + heroBounds!.height,
+  );
   await page.screenshot({ path: "work/catalog-mobile.png", fullPage: true });
   await page.getByRole("button", { name: "More info" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -1085,6 +1098,9 @@ test("Unwatched preserves categories, skips watched neighbors and combines with 
     .click();
   await expect(recentCards(page)).toHaveCount(2);
   await expect(
+    page.getByRole("region", { name: "Unwatched Movies", exact: true }),
+  ).toHaveCount(0);
+  await expect(
     page
       .getByRole("region", { name: "Drama", exact: true })
       .locator("[data-movie]"),
@@ -1127,4 +1143,58 @@ test("Unwatched preserves categories, skips watched neighbors and combines with 
   await expect(
     page.getByRole("region", { name: "Drama", exact: true }),
   ).toContainText("Second Chance");
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "Discover", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Unwatched Movies", exact: true }),
+  ).toBeVisible();
+});
+
+test("Surprise me changes films and releases the old preview", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "direct" });
+  await connect(page);
+  const hero = page.locator(".hero");
+  await expect(hero.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  const previous = await hero.locator("video").elementHandle();
+  const surprise = hero.getByRole("button", { name: "Surprise me" });
+  await surprise.click();
+  await expect(hero.locator("h1")).toHaveText("Third Shore");
+  await expect(hero.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  await expect(page.locator("video")).toHaveCount(1);
+  expect(await previous!.evaluate((video) => video.hasAttribute("src"))).toBe(
+    false,
+  );
+  expect(await hero.locator("video").evaluate((video) => video.muted)).toBe(
+    true,
+  );
+  await expect(surprise).toBeFocused();
+});
+
+test("Surprise me falls back when all films are watched", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "missing", allWatched: true });
+  await connect(page);
+  const hero = page.locator(".hero");
+  await expect(hero.locator("h1")).toHaveText("First Light");
+  await hero.getByRole("button", { name: "Surprise me" }).click();
+  await expect(hero.locator("h1")).toHaveText("Second Chance");
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "Unwatched", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "No films match this combination" }),
+  ).toBeVisible();
+  await expect(hero.locator("h1")).toHaveText("Second Chance");
 });

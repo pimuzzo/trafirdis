@@ -86,7 +86,7 @@ describe("movie library preference", () => {
 });
 
 describe("featured movie", () => {
-  it("picks from the full library and stays stable when metadata order or contents update", () => {
+  it("keeps the featured film stable through metadata updates", () => {
     const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
     const { result, rerender } = renderHook(
       ({ items }) => useFeaturedMovie(items, "library-a"),
@@ -122,5 +122,65 @@ describe("featured movie", () => {
     expect(result.current.movie?.id).toBe("2");
     act(() => result.current.selectFeatured("unknown"));
     expect(result.current.movie?.id).toBe("2");
+  });
+  it("rerolls within unwatched films without repeating", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const items = [
+      movie(),
+      movie({ id: "2", watched: true }),
+      movie({ id: "3" }),
+    ];
+    const { result } = renderHook(() => useFeaturedMovie(items, "library-a"));
+    expect(result.current.movie?.id).toBe("3");
+    expect(result.current.canRandomize).toBe(true);
+    act(() => result.current.randomizeFeatured());
+    expect(result.current.movie?.id).toBe("1");
+    act(() => result.current.randomizeFeatured());
+    expect(result.current.movie?.id).toBe("3");
+  });
+  it("uses watched films when no unwatched titles remain", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const items = movies.map((item) => ({ ...item, watched: true }));
+    const { result } = renderHook(() => useFeaturedMovie(items, "library-a"));
+    expect(result.current.movie?.id).toBe("1");
+    expect(result.current.canRandomize).toBe(true);
+    act(() => result.current.randomizeFeatured());
+    expect(result.current.movie?.id).toBe("2");
+    expect(result.current.movie?.watched).toBe(true);
+  });
+  it("handles single-candidate and empty libraries", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const { result, rerender } = renderHook(
+      ({ items }) => useFeaturedMovie(items, "library-a"),
+      { initialProps: { items: [movie(), movie({ id: "2", watched: true })] } },
+    );
+    expect(result.current.movie?.id).toBe("1");
+    expect(result.current.canRandomize).toBe(false);
+    act(() => result.current.randomizeFeatured());
+    expect(result.current.movie?.id).toBe("1");
+    rerender({ items: [] });
+    act(() => result.current.randomizeFeatured());
+    expect(result.current.movie).toBeUndefined();
+    expect(result.current.canRandomize).toBe(false);
+  });
+  it("revalidates the featured choice when Plex watch status changes", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const { result, rerender } = renderHook(
+      ({ items }) => useFeaturedMovie(items, "library-a"),
+      {
+        initialProps: {
+          items: movies.map((item) => ({ ...item, watched: true })),
+        },
+      },
+    );
+    expect(result.current.movie?.id).toBe("1");
+    rerender({
+      items: [movie({ watched: true }), movie({ id: "2" })],
+    });
+    expect(result.current.movie?.id).toBe("2");
+    rerender({
+      items: [movie(), movie({ id: "2", watched: true })],
+    });
+    expect(result.current.movie?.id).toBe("1");
   });
 });

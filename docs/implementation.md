@@ -45,3 +45,9 @@ This change extends the existing details popup. The home hero, playback/audio po
 The movie-library selector remembers an explicit choice in browser local storage, scoped to the server's public identity (or configured origin when the identity is unavailable). Preferences are checked against the current account's accessible sections before loading movies, with a safe fallback when a library disappears. Storage failures preserve in-memory switching. No credentials or movie catalog are persisted with the preference.
 
 The search field groups its icon and input under one focus outline, with separate space for the shortcut badge. A randomly featured movie stays stable across hover, keyboard focus, local filtering, details navigation and metadata refreshes. A new page or library gets a fresh choice; diagnostics can explicitly select a test film. The redundant My library navigation entry was removed; Discover, Unwatched, search and all filters retain category rails; empty categories are omitted. The floating player and its visibility/selection orchestration were removed, so focusing a lower rail does not initiate another stream.
+
+## Featured discovery follow-up
+
+The hero omits the decorative index and adds Surprise me. Initial and explicit random selections share an unwatched-first pool, with watched films as the fallback when no unwatched titles remain. The current film is excluded when an eligible alternative exists; a single-candidate pool disables the action. Updated Plex watch metadata revalidates the pool, while ordinary browsing preserves the chosen film. Advanced diagnostics retain explicit movie selection.
+
+The Unwatched view keeps genre and other category rails, but omits its redundant Unwatched Movies section. Returning to Discover restores that section when applicable. Existing trailer discovery, authentication and playback mechanisms are unchanged.

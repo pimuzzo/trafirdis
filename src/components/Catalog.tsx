@@ -89,10 +89,11 @@ export default function Catalog({
     [movies, filters],
   );
   const active = visible.find((m) => m.id === selected);
-  const { movie: featured, selectFeatured } = useFeaturedMovie(
+  const featuredState = useFeaturedMovie(
     movies,
     sample ? "sample" : `${serverKey || ""}:${libraryId || ""}`,
   );
+  const { movie: featured, selectFeatured } = featuredState;
   const rails = useMemo(
     () =>
       groupMovies(
@@ -104,8 +105,9 @@ export default function Catalog({
           .split(",")
           .map((s: string) => s.trim())
           .filter(Boolean),
+        filters.watched !== "unwatched",
       ),
-    [visible],
+    [visible, filters.watched],
   );
   const connectedServer: Server | undefined = sample
     ? { name: "Sample library" }
@@ -217,7 +219,8 @@ export default function Catalog({
           client={client}
           trailers={trailers}
           connectedServer={connectedServer}
-          total={movies.length}
+          onRandomize={featuredState.randomizeFeatured}
+          canRandomize={featuredState.canRandomize}
           previewVisible={!details}
           previewEnabled={!settings && !diagnostics}
           onDetails={(movie) =>

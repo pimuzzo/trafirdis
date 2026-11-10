@@ -10,7 +10,8 @@ export function Hero({
   client,
   trailers,
   connectedServer,
-  total,
+  onRandomize,
+  canRandomize,
   previewVisible,
   previewEnabled,
   onDetails,
@@ -19,12 +20,16 @@ export function Hero({
   client: PlexClient | null;
   trailers: TrailerService | null;
   connectedServer?: Server;
-  total: number;
+  onRandomize: () => void;
+  canRandomize: boolean;
   previewVisible: boolean;
   previewEnabled: boolean;
   onDetails: (movie: Movie) => void;
 }) {
   const sample = !client;
+  const emptySuggestion = movie.watched
+    ? "No other films to suggest"
+    : "No other unwatched films to suggest";
   return (
     <section className="hero" aria-label={`Featured movie: ${movie.title}`}>
       <div className="hero-background" key={movie.id}>
@@ -57,6 +62,15 @@ export function Hero({
             <Icon name="info" size={18} />
             More info
           </button>
+          <button
+            className="button secondary hero-randomize"
+            onClick={onRandomize}
+            disabled={!canRandomize}
+            title={canRandomize ? undefined : emptySuggestion}
+          >
+            <Icon name="shuffle" size={18} />
+            Surprise me
+          </button>
         </div>
         <div className="hero-footnote">
           <img
@@ -73,9 +87,6 @@ export function Hero({
       </div>
       <div className="hero-caption">
         <span>YOUR COLLECTION, A NEW PERSPECTIVE</span>
-        <span className="hero-index">
-          01 <span>/ {String(total).padStart(2, "0")}</span>
-        </span>
       </div>
     </section>
   );

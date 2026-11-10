@@ -69,7 +69,11 @@ export function genresOf(movies: Movie[]): string[] {
     a.localeCompare(b, "en"),
   );
 }
-export function groupMovies(movies: Movie[], order: string[] = []): Rail[] {
+export function groupMovies(
+  movies: Movie[],
+  order: string[] = [],
+  includeUnwatched = true,
+): Rail[] {
   const rails: Rail[] = [
     {
       title: "Continue Watching",
@@ -81,7 +85,10 @@ export function groupMovies(movies: Movie[], order: string[] = []): Rail[] {
       title: "Recently Added",
       movies: [...movies].sort((a, b) => b.addedAt - a.addedAt),
     },
-    { title: "Unwatched Movies", movies: movies.filter((m) => !m.watched) },
+    {
+      title: "Unwatched Movies",
+      movies: includeUnwatched ? movies.filter((m) => !m.watched) : [],
+    },
     ...genresOf(movies).map((title) => ({
       title,
       movies: movies.filter((m) => m.genres.includes(title)),
