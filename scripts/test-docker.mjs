@@ -337,13 +337,11 @@ try {
     .evaluate((video) => video.src);
   const mediaCount = hlsRequests.length;
   const checkBrowserVisibility = async () => {
-    const before = await page
-      .locator("video")
-      .evaluate((video) => ({
-        time: video.currentTime,
-        source: video.src,
-        muted: video.muted,
-      }));
+    const before = await page.locator("video").evaluate((video) => ({
+      time: video.currentTime,
+      source: video.src,
+      muted: video.muted,
+    }));
     await page.evaluate(() => {
       Object.defineProperty(document, "hidden", {
         configurable: true,
@@ -356,13 +354,11 @@ try {
       before.time,
     );
     assert.deepEqual(
-      await page
-        .locator("video")
-        .evaluate((video) => ({
-          source: video.src,
-          muted: video.muted,
-          paused: video.paused,
-        })),
+      await page.locator("video").evaluate((video) => ({
+        source: video.src,
+        muted: video.muted,
+        paused: video.paused,
+      })),
       { source: before.source, muted: before.muted, paused: false },
     );
     await page.evaluate(() => {
