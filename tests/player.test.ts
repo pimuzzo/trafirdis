@@ -240,3 +240,58 @@ describe("HLS decision lifecycle", () => {
     },
   );
 });
+
+describe("suspended playback control", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue(
+      "probably",
+    );
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+  });
+  afterEach(() => vi.useRealTimers());
+  it("preserves the native HLS source while suspended and restarts at zero without another decision", async () => {
+    const client = new PlexClient("x");
+    const prepare = vi.spyOn(client, "preparePreview").mockResolvedValue();
+    const stop = vi.spyOn(client, "stopPreviewSession").mockResolvedValue();
+    const video = document.createElement("video");
+    const controller = new AbortController();
+    let control!: import("../src/trailer/player").PlaybackControl;
+    const result = playAttempt(
+      video,
+      {
+        path: "/video/:/transcode/universal/start.m3u8?session=one",
+        kind: "hls",
+        source: "Plex trailer",
+        session: "one",
+      },
+      client,
+      controller.signal,
+      () => {},
+      () => {},
+      () => {},
+      (value) => {
+        control = value;
+      },
+    );
+    await Promise.resolve();
+    video.dispatchEvent(new Event("playing"));
+    const source = video.src;
+    video.currentTime = 3;
+    control.suspend();
+    expect(video.muted).toBe(true);
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(video.src).toBe(source);
+    expect(stop).not.toHaveBeenCalled();
+    expect(control.restart()).toBe(true);
+    expect(video.currentTime).toBe(0);
+    expect(prepare).toHaveBeenCalledOnce();
+    const check = expect(result).rejects.toMatchObject({ code: "timeout" });
+    await vi.advanceTimersByTimeAsync(12000);
+    await check;
+    expect(stop).toHaveBeenCalledExactlyOnceWith("one");
+    expect(control.restart()).toBe(false);
+  });
+});

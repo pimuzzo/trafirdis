@@ -67,7 +67,7 @@ These are scope and acceptance decisions; they introduce no application behavior
 
 ## Hero audio preference
 
-The hero starts muted and keeps the user's mute/unmute choice across Surprise me and pause/resume, settings and tab visibility restarts. It reuses the existing preview audio preference and one video element while each movie change cancels and replaces the old stream. Muting again also carries over to the next suggestion.
+The hero starts muted and keeps the user's mute/unmute choice across Surprise me and pause/resume, settings and viewport visibility restarts. It reuses the existing preview audio preference and one video element while each movie change cancels and replaces the old stream. Muting again also carries over to the next suggestion.
 
 The preference stays in memory for the mounted hero preview. Opening details removes that preview, so returning starts muted again; reloading also starts muted. Browser denial of unmuted autoplay retains the source and sound preference for Play preview. This adds no storage, dependency or Plex operation.
 
@@ -82,3 +82,15 @@ Play is disabled during loading and when Plex has no playable trailer resource. 
 The existing PRD now defines restart reliability for hero and details previews. HLS playback requests a fresh, validated PMS decision before loading any manifest, with the same extra, settings and session/client identity as start. Decision approval alone never marks a URL resolved or playback verified. Denied/unknown responses cannot start a stream, authentication failures stop candidate fallback, and cancellation/timeout prevents late approvals from attaching stale sources. Existing metadata caching, native parts, audio preferences and scoped cleanup remain in place.
 
 Unit tests cover decision validation, credential handling, cancellation and startup timeout. Browser and production Docker fixtures reject starts without matching decisions and exercise repeated popup reopen and hero scroll-away/return using synthetic media. Real PMS restart acceptance remains pending; private diagnostic logs are not repository assets.
+
+## Retained preview buffers experiment
+
+PR #6's route-preference optimization was reverted and closed at the maintainer's request after no noticeable real-library improvement. This replacement starts from main with PR #5's verified decision fix intact. The maintainer confirmed that fix on Chrome/Docker.
+
+Playback lifetime is now independent of its mounted surface. An eligible already-playing HLS element can be detached, muted and suspended in a two-entry/30-second pool; claiming it reattaches the same buffered element and restarts at zero on the still-open session. Native parts, ended/unverified/oversized buffers and missing-start buffers use fresh playback. Reuse failure disposes the old session and rebuilds through a fresh decision/start. Timeouts, one playing surface, audio rules and per-attempt diagnostics remain intact. Catalog teardown, expiry, eviction, refresh/inspection, settings release retained resources. No media persistence, backend, dependency or neighbor preloading was added.
+
+Browser tests prove no new media requests are necessary for a warm return with delayed initial segments, using native HLS and MSE. Unit tests verify lifecycle limits and cleanup; production Docker asserts no new HLS preparation for buffered returns. Native buffering and PMS transcoder resources remain browser/server controlled, so the documented limits are not an exact memory or server-resource cap. The maintainer confirmed the retained-preview behavior works on the real Plex deployment.
+
+## Browser-tab playback continuity
+
+Within the retained-preview PR, removed the document-visibility gate from both preview surfaces at the maintainer's request. Changing browser tabs no longer pauses/mutes the video, clears retained buffers or rebuilds its session; viewport scrolling, manual pause and settings/disconnect still apply. Inactive retention also checks an elapsed-time deadline when accessed, covering throttled background timers. Headless visibility-event tests verify ongoing real synthetic HLS playback and unchanged position/source/audio; actual desktop/OS background media scheduling remains to be checked manually.

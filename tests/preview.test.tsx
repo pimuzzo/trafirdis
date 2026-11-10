@@ -301,3 +301,84 @@ describe("automatic preview lifecycle", () => {
     });
   });
 });
+
+describe("retained playback surface handoff", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, "buffered", "get").mockReturnValue({
+      length: 1,
+      start: () => 0,
+      end: () => 6,
+    } as TimeRanges);
+    vi.mocked(playAttempt)
+      .mockReset()
+      .mockImplementation(
+        (
+          video,
+          attempt,
+          client,
+          signal,
+          _resolved,
+          playing,
+          _blocked,
+          control,
+        ) => {
+          control?.({
+            suspend: vi.fn(),
+            restart: vi.fn(() => {
+              playing();
+              return true;
+            }),
+          });
+          playing();
+          return pending(video, attempt, client, signal);
+        },
+      );
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+  it("can repeatedly hand a retained playback between views without disposing it from an obsolete wait", async () => {
+    const client = new PlexClient("x");
+    vi.spyOn(client, "details").mockResolvedValue({
+      Extras: {
+        Metadata: [{ subtype: "trailer", key: "/library/metadata/200" }],
+      },
+    });
+    const service = new TrailerService(client);
+    const video = { current: null } as RefObject<HTMLVideoElement | null>;
+    const host = { current: document.createElement("div") };
+    const { rerender, unmount } = renderHook(
+      ({ id }) =>
+        usePreview(
+          video,
+          service,
+          id,
+          true,
+          0,
+          undefined,
+          1500,
+          undefined,
+          host,
+        ),
+      { initialProps: { id: "A" } },
+    );
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    rerender({ id: "B" });
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    for (const id of ["A", "B", "A", "B"]) {
+      rerender({ id });
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(playAttempt).toHaveBeenCalledTimes(2);
+      expect(
+        vi.mocked(playAttempt).mock.calls.every((call) => !call[3].aborted),
+      ).toBe(true);
+    }
+    unmount();
+    service.clear();
+    expect(
+      vi.mocked(playAttempt).mock.calls.every((call) => call[3].aborted),
+    ).toBe(true);
+  });
+});
