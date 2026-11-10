@@ -1,5 +1,5 @@
 import { diagnosticsEnabled, serverLabel } from "../config";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PlexClient, errorMessage } from "../plex/client";
 import {
@@ -24,6 +24,23 @@ import { useFeaturedMovie } from "../hooks/useFeaturedMovie";
 const Diagnostics = diagnosticsEnabled
   ? lazy(() => import("./Diagnostics"))
   : null;
+function useIsPhone() {
+  const query = useRef(
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 540px)")
+      : null,
+  );
+  const [small, setSmall] = useState(() => query.current?.matches ?? false);
+  useEffect(() => {
+    const mq = query.current;
+    if (!mq) return;
+    const handler = (e: MediaQueryListEvent) => setSmall(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return small;
+}
+
 export default function Catalog({
   client,
   onDisconnect,
@@ -32,6 +49,7 @@ export default function Catalog({
   onDisconnect: () => void;
 }) {
   const sample = !client;
+  const isPhone = useIsPhone();
   const trailers = useMemo(
     () => (client ? new TrailerService(client) : null),
     [client],
@@ -222,7 +240,7 @@ export default function Catalog({
           connectedServer={connectedServer}
           onRandomize={featuredState.randomizeFeatured}
           canRandomize={featuredState.canRandomize}
-          previewVisible={!details}
+          previewVisible={!details && !isPhone}
           previewEnabled={!settings && !diagnostics}
           onDetails={(movie) =>
             showDetails(movie, { title: "Movie library", movies })
