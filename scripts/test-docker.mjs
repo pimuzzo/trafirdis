@@ -336,6 +336,44 @@ try {
     .locator("video")
     .evaluate((video) => video.src);
   const mediaCount = hlsRequests.length;
+  const checkBrowserVisibility = async () => {
+    const before = await page
+      .locator("video")
+      .evaluate((video) => ({
+        time: video.currentTime,
+        source: video.src,
+        muted: video.muted,
+      }));
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        value: true,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.waitForFunction(
+      (time) => document.querySelector("video")?.currentTime > time + 0.2,
+      before.time,
+    );
+    assert.deepEqual(
+      await page
+        .locator("video")
+        .evaluate((video) => ({
+          source: video.src,
+          muted: video.muted,
+          paused: video.paused,
+        })),
+      { source: before.source, muted: before.muted, paused: false },
+    );
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        value: false,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+  };
+  await checkBrowserVisibility();
   // New streams require a decision; retained open streams keep their buffer.
 
   for (let i = 0; i < 2; i++) {
@@ -350,6 +388,7 @@ try {
           ?.getAttribute("data-preview-phase") === "playing",
     );
     assert.equal(await page.locator("video").count(), 1);
+    if (i === 0) await checkBrowserVisibility();
     await page.keyboard.press("Escape");
     await page.waitForFunction(
       () =>

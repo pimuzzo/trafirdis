@@ -111,9 +111,15 @@ export class RetainedPreviews {
   epoch = 0;
   private entries = new Map<
     string,
-    { playback: PreviewPlayback; timer: ReturnType<typeof setTimeout> }
+    {
+      playback: PreviewPlayback;
+      timer: ReturnType<typeof setTimeout>;
+      expires: number;
+    }
   >();
   has(id: string): boolean {
+    const entry = this.entries.get(id);
+    if (entry && entry.expires <= Date.now()) this.remove(id);
     return this.entries.has(id);
   }
   owns(video: HTMLVideoElement): boolean {
@@ -122,6 +128,7 @@ export class RetainedPreviews {
     );
   }
   take(id: string): PreviewPlayback | undefined {
+    if (!this.has(id)) return;
     const entry = this.entries.get(id);
     if (!entry) return;
     clearTimeout(entry.timer);
@@ -137,7 +144,11 @@ export class RetainedPreviews {
     playback.control!.suspend();
     playback.video.remove();
     const timer = setTimeout(() => this.remove(id), retentionMs);
-    this.entries.set(id, { playback, timer });
+    this.entries.set(id, {
+      playback,
+      timer,
+      expires: Date.now() + retentionMs,
+    });
     while (this.entries.size > retainedLimit)
       this.remove(this.entries.keys().next().value!);
     playback.onSettled = () => this.removeIfCurrent(id, playback);

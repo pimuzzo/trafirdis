@@ -411,7 +411,7 @@ test("plays a native trailer after the delay, muted and inline, and stops on hid
     requests.some((r) => /timeline|scrobble|playQueues/.test(r.path)),
   ).toBe(false);
 });
-test("hero keeps audio and matching controls after pause, settings and visibility restarts", async ({
+test("hero keeps audio and matching controls after pause, settings and browser visibility changes", async ({
   page,
 }) => {
   test.setTimeout(60000);
@@ -445,7 +445,7 @@ test("hero keeps audio and matching controls after pause, settings and visibilit
     });
     document.dispatchEvent(new Event("visibilitychange"));
   });
-  await expect(preview).toHaveAttribute("data-preview-phase", "paused");
+  await expectUnmuted();
   await page.evaluate(() => {
     Object.defineProperty(document, "hidden", {
       configurable: true,
@@ -1691,3 +1691,74 @@ test("a failed retained restart rebuilds through a fresh approved Plex session",
   expect(requests.some((request) => request.path.endsWith("/stop"))).toBe(true);
   await expect(page.locator("video")).toHaveCount(1);
 });
+
+for (const surface of ["hero", "details"] as const) {
+  test(`${surface} keeps the playing HLS session across browser visibility events`, async ({
+    page,
+  }) => {
+    const requests = await mockPlex(page, { trailer: "hls" });
+    await connect(page);
+    const hero = page.locator(".hero");
+    if (surface === "details")
+      await hero.getByRole("button", { name: "More info" }).click();
+    const host = surface === "hero" ? hero : page.getByRole("dialog");
+    const preview = host.locator("[data-preview-phase]");
+    await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+    await host.getByRole("button", { name: "Unmute preview" }).click();
+    const video = await host.locator("video").elementHandle();
+    const before = await video!.evaluate((video) => ({
+      source: video.src,
+      time: video.currentTime,
+    }));
+    const starts = requests.filter((request) =>
+      request.path.endsWith("start.m3u8"),
+    ).length;
+    const stops = requests.filter((request) =>
+      request.path.endsWith("/stop"),
+    ).length;
+    // Headless Chrome keeps all tabs visible. Exercise document visibility
+    // events explicitly while real synthetic media decodes.
+    const visibility = async (hidden: boolean) =>
+      page.evaluate((hidden) => {
+        Object.defineProperty(document, "hidden", {
+          configurable: true,
+          value: hidden,
+        });
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          value: hidden ? "hidden" : "visible",
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+      }, hidden);
+    await visibility(true);
+    await expect
+      .poll(() => video!.evaluate((video) => video.currentTime))
+      .toBeGreaterThan(before.time + 0.3);
+    const timeHidden = await video!.evaluate((video) => video.currentTime);
+    expect(
+      await video!.evaluate((video) => ({
+        paused: video.paused,
+        muted: video.muted,
+        source: video.src,
+      })),
+    ).toEqual({ paused: false, muted: false, source: before.source });
+    await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+    expect(
+      requests.filter((request) => request.path.endsWith("/stop")),
+    ).toHaveLength(stops);
+    await visibility(false);
+    await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+    expect(
+      await video!.evaluate((video) => video.currentTime),
+    ).toBeGreaterThanOrEqual(timeHidden);
+    expect(
+      requests.filter((request) => request.path.endsWith("start.m3u8")),
+    ).toHaveLength(starts);
+    expect(await video!.evaluate((video) => video.muted)).toBe(false);
+    await expect(page.locator("video")).toHaveCount(1);
+    await host.getByRole("button", { name: "Pause preview" }).click();
+    await visibility(true);
+    await visibility(false);
+    await expect(preview).toHaveAttribute("data-preview-phase", "paused");
+  });
+}

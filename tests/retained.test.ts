@@ -116,6 +116,14 @@ describe("bounded retained preview sessions", () => {
     expect(pool.take("1")).toBeUndefined();
     expect(a.controller.signal.aborted).toBe(true);
   });
+  it("expires by elapsed time even when a background tab throttles its timer", () => {
+    const pool = new RetainedPreviews();
+    const a = lease(pool, "A");
+    pool.retain("1", a);
+    vi.setSystemTime(Date.now() + 30001);
+    expect(pool.take("1")).toBeUndefined();
+    expect(a.controller.signal.aborted).toBe(true);
+  });
   it("evicts the oldest of more than two retained sessions", () => {
     const pool = new RetainedPreviews();
     const a = lease(pool, "A"),

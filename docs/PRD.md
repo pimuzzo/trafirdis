@@ -250,10 +250,21 @@ The maintainer found no noticeable improvement from the route-preference experim
 - Keep at most two inactive previews, for at most 30 seconds after each release. Retain only buffers containing the beginning (at least 0.25 seconds from zero, with no more than 60 buffered seconds). These are entry/time/buffer-duration limits, not a strict byte-memory guarantee. Do not preload other trailers or persist media.
 - Returning to an eligible preview starts at zero on its existing open session, without new decision/start/initial segment requests when the required bytes remain buffered. Cold, unverified, ended, oversized or evicted buffers use the normal delayed discovery and fresh approved HLS path. Do not reuse closed session URLs.
 - On reuse failure, dispose the old playback and rebuild through a fresh Plex decision/session. Existing startup/buffering timeouts and candidate fallbacks remain active; no Plex restriction is bypassed.
-- Expiry, eviction, error, refresh/inspection, background-tab visibility, settings and disconnect release retained sessions with existing scoped best-effort stop calls. Cached media must stay silent and detached from the visible surface. Native HLS buffering remains browser-controlled; hls.js loading is suspended explicitly. Plex may retain a transcoder temporarily until cleanup/expiry.
+- Expiry, eviction, error, refresh/inspection, settings and disconnect release retained sessions with existing scoped best-effort stop calls. Cached media must stay silent and detached from the visible surface. Native HLS buffering remains browser-controlled; hls.js loading is suspended explicitly. Plex may retain a transcoder temporarily until cleanup/expiry.
 - Preserve existing popup/hero audio reset rules and controls. Only real media/playing events establish resolution/playback; retained history must not make a new restart appear successful before it plays.
 
 Acceptance: simulate slow initial segments, play A and B, then deny new media requests. Returning to A and the hero must still play from zero with the same existing element/source and no new HLS startup. Test native HLS and MSE; test 30-second expiry, two-entry eviction, ineligible buffers, teardown, silence and fresh-session fallback after reuse failure. Production Docker must prove the no-rebuild path too. Real Plex latency and session survival remain maintainer acceptance items; a first-start speedup is not claimed.
+
+### Browser-tab continuity — 2026-11-10
+
+The maintainer confirmed retained buffers work on the real deployment and requested continued playback when switching browser tabs, for both hero and details.
+
+- Browser document visibility changes must not pause/mute/restart an active preview, clear its retained buffers or recreate its Plex session. Playback position and the chosen audio state continue, and trailers still end normally.
+- Keep viewport-based suspension for scrolling out of the preview, manual pause, settings/disconnect cleanup, one playing surface and existing mute rules. A manually paused preview must not auto-resume on a visibility event.
+- Inactive retained entries still expire by elapsed time, including when background timers are throttled. This does not extend the 30-second cache lifetime.
+- Do not add background keepalive workarounds, dependencies or Plex endpoints. Browser/OS tab suspension remains outside the application guarantee.
+
+Acceptance: for hero and details, dispatch hidden/visible events while real synthetic HLS decodes; assert time continues, source/session/audio are unchanged, and no stop/start is introduced. Existing scroll/retention/cleanup tests must pass. Real desktop tab switching remains a manual check because headless Chrome does not report pages hidden when another tab is brought forward.
 
 ### 4.5 Movie Details
 

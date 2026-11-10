@@ -20,7 +20,6 @@ export function Preview({
   const media = useRef<HTMLDivElement>(null);
   const mutePreference = useRef(true);
   const [visible, setVisible] = useState(false);
-  const [pageVisible, setPageVisible] = useState(!document.hidden);
   const [retry, setRetry] = useState(0);
   const [muted, setMuted] = useState(true);
   const [paused, setPaused] = useState(false);
@@ -30,12 +29,7 @@ export function Preview({
       { threshold: 0.15 },
     );
     if (host.current) observer.observe(host.current);
-    const change = () => setPageVisible(!document.hidden);
-    document.addEventListener("visibilitychange", change);
-    return () => {
-      observer.disconnect();
-      document.removeEventListener("visibilitychange", change);
-    };
+    return () => observer.disconnect();
   }, []);
   useEffect(() => {
     setMuted(preserveMute ? mutePreference.current : true);
@@ -46,13 +40,13 @@ export function Preview({
     video,
     service,
     movieId,
-    enabled && visible && pageVisible && !paused,
+    enabled && visible && !paused,
     retry,
     setMuted,
     undefined,
     preserveMute ? mutePreference : undefined,
     media,
-    enabled && pageVisible,
+    enabled,
   );
   const playing = report.phase === "playing";
   useLayoutEffect(() => {
@@ -65,12 +59,10 @@ export function Preview({
     "resolving",
     "resolved",
   ].includes(report.phase);
-  const loading =
-    Boolean(service) && busy && enabled && !paused && visible && pageVisible;
+  const loading = Boolean(service) && busy && enabled && !paused && visible;
   const canControl =
     enabled &&
     visible &&
-    pageVisible &&
     ["playing", "paused", "ended", "blocked", "error"].includes(report.phase);
   const actionLabel = playing
     ? "Pause preview"
