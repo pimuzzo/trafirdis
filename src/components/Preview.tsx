@@ -7,14 +7,17 @@ export function Preview({
   movieId,
   enabled = true,
   compact = false,
+  preserveMute = false,
 }: {
   service: TrailerService | null;
   movieId: string;
   enabled?: boolean;
   compact?: boolean;
+  preserveMute?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
+  const mutePreference = useRef(true);
   const [visible, setVisible] = useState(false);
   const [pageVisible, setPageVisible] = useState(!document.hidden);
   const [retry, setRetry] = useState(0);
@@ -34,10 +37,10 @@ export function Preview({
     };
   }, []);
   useEffect(() => {
-    setMuted(true);
+    setMuted(preserveMute ? mutePreference.current : true);
     setPaused(false);
     setRetry(0);
-  }, [movieId]);
+  }, [movieId, preserveMute]);
   const report = usePreview(
     video,
     service,
@@ -45,6 +48,8 @@ export function Preview({
     enabled && visible && pageVisible && !paused,
     retry,
     setMuted,
+    undefined,
+    preserveMute ? mutePreference : undefined,
   );
   const playing = report.phase === "playing";
   const busy = [
@@ -80,8 +85,11 @@ export function Preview({
       <video
         ref={video}
         className={playing ? "preview-video is-playing" : "preview-video"}
-        muted
-        onVolumeChange={(event) => setMuted(event.currentTarget.muted)}
+        muted={muted}
+        onVolumeChange={(event) => {
+          mutePreference.current = event.currentTarget.muted;
+          setMuted(event.currentTarget.muted);
+        }}
         playsInline
         preload="none"
         aria-label="Movie trailer preview"
@@ -121,6 +129,7 @@ export function Preview({
               onClick={() => {
                 if (video.current) {
                   video.current.muted = !video.current.muted;
+                  mutePreference.current = video.current.muted;
                   setMuted(video.current.muted);
                 }
               }}

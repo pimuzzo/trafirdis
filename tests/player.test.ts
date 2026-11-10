@@ -57,7 +57,11 @@ describe("native video playback", () => {
     await Promise.resolve();
     expect(blocked).toHaveBeenCalledOnce();
     expect(video.hasAttribute("src")).toBe(true);
+    video.dispatchEvent(new Event("loadedmetadata"));
+    video.dispatchEvent(new Event("waiting"));
     await vi.advanceTimersByTimeAsync(15000);
+    expect(video.hasAttribute("src")).toBe(true);
+    video.dispatchEvent(new Event("play"));
     video.dispatchEvent(new Event("playing"));
     video.dispatchEvent(new Event("ended"));
     await result;
@@ -107,6 +111,30 @@ describe("native video playback", () => {
     );
     const check = expect(result).rejects.toMatchObject({ name: "AbortError" });
     controller.abort();
+    await check;
+    expect(video.hasAttribute("src")).toBe(false);
+  });
+  it("times out a stalled manual retry after autoplay denial", async () => {
+    vi.mocked(HTMLMediaElement.prototype.play)
+      .mockRejectedValueOnce(new DOMException("Blocked", "NotAllowedError"))
+      .mockResolvedValue();
+    const video = document.createElement("video");
+    const blocked = vi.fn();
+    const result = playAttempt(
+      video,
+      attempt,
+      new PlexClient("x"),
+      new AbortController().signal,
+      () => {},
+      () => {},
+      blocked,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(blocked).toHaveBeenCalledOnce();
+    video.dispatchEvent(new Event("play"));
+    const check = expect(result).rejects.toMatchObject({ code: "timeout" });
+    await vi.advanceTimersByTimeAsync(12000);
     await check;
     expect(video.hasAttribute("src")).toBe(false);
   });

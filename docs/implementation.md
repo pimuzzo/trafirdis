@@ -51,3 +51,9 @@ The search field groups its icon and input under one focus outline, with separat
 The hero omits the decorative index and adds Surprise me. Initial and explicit random selections share an unwatched-first pool, with watched films as the fallback when no unwatched titles remain. The current film is excluded when an eligible alternative exists; a single-candidate pool disables the action. Updated Plex watch metadata revalidates the pool, while ordinary browsing preserves the chosen film. Advanced diagnostics retain explicit movie selection.
 
 The Unwatched view keeps genre and other category rails, but omits its redundant Unwatched Movies section. Returning to Discover restores that section when applicable. Existing trailer discovery, authentication and playback mechanisms are unchanged.
+
+## Details audio preference
+
+Details keep the user's mute/unmute choice in memory while the popup remains open, including previous/next navigation and pause/resume. The popup reuses one video element across films; stream cancellation and cleanup still run for every movie change. Closing and reopening details starts a fresh muted session, and the hero retains its original muted restart policy.
+
+Autoplay denial retains the selected audio state and loaded source for an explicit Play preview gesture. Later metadata cannot overwrite the blocked phase; waiting for user input does not expire the source, while an actual manual playback retry still has the normal startup timeout. No preference is persisted and no Plex operation or authentication behavior changes.

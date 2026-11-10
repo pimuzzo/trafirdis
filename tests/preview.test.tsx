@@ -221,4 +221,54 @@ describe("automatic preview lifecycle", () => {
     expect(result.current.phase).toBe("error");
     expect(result.current.reason).not.toContain("private detail");
   });
+  it("keeps a popup mute choice through navigation and restarts", async () => {
+    const { service, ref } = setup();
+    const preference = { current: true };
+    const notify = vi.fn();
+    const { rerender } = renderHook(
+      ({ id, enabled }) => {
+        return usePreview(ref, service, id, enabled, 0, notify, 0, preference);
+      },
+      { initialProps: { id: "A", enabled: true } },
+    );
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    const first = vi.mocked(playAttempt).mock.calls[0][3];
+    preference.current = false;
+    ref.current!.muted = false;
+    rerender({ id: "A", enabled: true });
+    expect(first.aborted).toBe(false);
+    expect(playAttempt).toHaveBeenCalledOnce();
+    rerender({ id: "B", enabled: true });
+    expect(first.aborted).toBe(true);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(ref.current!.muted).toBe(false);
+    expect(notify).toHaveBeenLastCalledWith(false);
+    rerender({ id: "B", enabled: false });
+    rerender({ id: "B", enabled: true });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(ref.current!.muted).toBe(false);
+    preference.current = true;
+    rerender({ id: "C", enabled: true });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(ref.current!.muted).toBe(true);
+    expect(notify).toHaveBeenLastCalledWith(true);
+  });
+  it("keeps blocked playback ready as metadata arrives", async () => {
+    const { service, ref } = setup();
+    vi.mocked(playAttempt).mockImplementationOnce(
+      (video, attempt, client, signal, resolved, _playing, blocked) => {
+        blocked?.();
+        resolved();
+        return pending(video, attempt, client, signal);
+      },
+    );
+    const { result } = renderHook(() => usePreview(ref, service, "A", true, 0));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(result.current).toMatchObject({
+      phase: "blocked",
+      urlResolved: true,
+      playbackSucceeded: false,
+      failure: "autoplay",
+    });
+  });
 });

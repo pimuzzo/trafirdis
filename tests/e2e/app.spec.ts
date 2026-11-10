@@ -1192,3 +1192,90 @@ test("Surprise me falls back when all films are watched", async ({ page }) => {
   ).toBeVisible();
   await expect(hero.locator("h1")).toHaveText("Second Chance");
 });
+
+test("details retain audio while navigating and reset on close", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  await mockPlex(page, { trailer: "direct" });
+  await connect(page);
+  await recentCards(page).first().click();
+  const dialog = page.locator(".details-dialog");
+  const video = dialog.locator("video");
+  const preview = dialog.locator("[data-preview-phase]");
+  const playing = async () => {
+    await expect(preview).toHaveAttribute("data-preview-phase", "playing", {
+      timeout: 10000,
+    });
+  };
+  await playing();
+  const original = await video.elementHandle();
+  await dialog.getByRole("button", { name: "Unmute preview" }).click();
+  expect(await video.evaluate((v) => v.muted)).toBe(false);
+  await dialog.getByRole("button", { name: "Next movie" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "Second Chance", exact: true }),
+  ).toBeVisible();
+  await playing();
+  expect(await video.evaluate((v) => v.muted)).toBe(false);
+  expect(await original!.evaluate((node) => node.isConnected)).toBe(true);
+  await expect(
+    dialog.getByRole("button", { name: "Mute preview", exact: true }),
+  ).toBeEnabled();
+  await dialog.getByRole("button", { name: "Previous movie" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "First Light", exact: true }),
+  ).toBeVisible();
+  await playing();
+  expect(await video.evaluate((v) => v.muted)).toBe(false);
+  await dialog.getByRole("button", { name: "Pause preview" }).click();
+  await expect(preview).toHaveAttribute("data-preview-phase", "paused");
+  await dialog.getByRole("button", { name: "Play preview" }).click();
+  await playing();
+  expect(await video.evaluate((v) => v.muted)).toBe(false);
+  await dialog
+    .getByRole("button", { name: "Mute preview", exact: true })
+    .click();
+  await dialog.getByRole("button", { name: "Next movie" }).click();
+  await playing();
+  expect(await video.evaluate((v) => v.muted)).toBe(true);
+  await expect(page.locator("video")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  expect(await page.locator(".hero video").evaluate((v) => v.muted)).toBe(true);
+  await recentCards(page).first().click();
+  await playing();
+  expect(await video.evaluate((v) => v.muted)).toBe(true);
+});
+
+test("blocked unmuted trailers resume with Play", async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = HTMLMediaElement.prototype.play;
+    let blocked = false;
+    HTMLMediaElement.prototype.play = function () {
+      if (!this.muted && this.src.includes("/library/parts/2/") && !blocked) {
+        blocked = true;
+        return Promise.reject(new DOMException("Blocked", "NotAllowedError"));
+      }
+      return original.call(this);
+    };
+  });
+  const requests = await mockPlex(page, { trailer: "direct" });
+  await connect(page);
+  await recentCards(page).first().click();
+  const dialog = page.locator(".details-dialog");
+  const preview = dialog.locator("[data-preview-phase]");
+  const video = dialog.locator("video");
+  await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+  await dialog.getByRole("button", { name: "Unmute preview" }).click();
+  await dialog.getByRole("button", { name: "Next movie" }).click();
+  await expect(preview).toHaveAttribute("data-preview-phase", "blocked");
+  expect(await video.evaluate((v) => v.muted)).toBe(false);
+  const source = await video.getAttribute("src");
+  await dialog.getByRole("button", { name: "Play preview" }).click();
+  await expect(preview).toHaveAttribute("data-preview-phase", "playing");
+  expect(await video.getAttribute("src")).toBe(source);
+  expect(await video.evaluate((v) => v.muted)).toBe(false);
+  expect(
+    requests.filter((request) => request.path === "/library/metadata/2"),
+  ).toHaveLength(1);
+});

@@ -55,12 +55,14 @@ export async function playAttempt(
   }
   return new Promise<void>((resolve, reject) => {
     let settled = false;
+    let awaitingGesture = false;
     let timer: ReturnType<typeof setTimeout>;
     const cleanup = () => {
       clearTimeout(timer);
       signal.removeEventListener("abort", abort);
       video.removeEventListener("loadedmetadata", metadata);
       video.removeEventListener("playing", playing);
+      video.removeEventListener("play", requested);
       video.removeEventListener("error", error);
       video.removeEventListener("ended", ended);
       video.removeEventListener("waiting", waiting);
@@ -94,11 +96,17 @@ export async function playAttempt(
       if (!settled) onResolved();
     };
     const playing = () => {
+      awaitingGesture = false;
       clearTimeout(timer);
       if (!settled) onPlaying();
     };
     const waiting = () => {
-      if (!settled) armTimeout();
+      if (!settled && !awaitingGesture) armTimeout();
+    };
+    const requested = () => {
+      if (settled) return;
+      awaitingGesture = false;
+      armTimeout();
     };
     const error = () => finish(playbackError(video));
     const ended = () => finish();
@@ -107,6 +115,7 @@ export async function playAttempt(
       void video.play().catch((err: unknown) => {
         if (settled) return;
         if (err instanceof DOMException && err.name === "NotAllowedError") {
+          awaitingGesture = true;
           clearTimeout(timer);
           onBlocked();
         } else
@@ -120,6 +129,7 @@ export async function playAttempt(
     };
     video.addEventListener("loadedmetadata", metadata);
     video.addEventListener("playing", playing);
+    video.addEventListener("play", requested);
     video.addEventListener("error", error);
     video.addEventListener("ended", ended);
     video.addEventListener("waiting", waiting);

@@ -386,11 +386,11 @@ export default function Catalog({
           onClose={() => setDetails(null)}
           preview={
             <Preview
-              key={details.rail.movies[details.index].id}
               service={trailers}
               movieId={details.rail.movies[details.index].id}
               enabled={!settings && !diagnostics}
               compact
+              preserveMute
             />
           }
         />
