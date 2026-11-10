@@ -3,7 +3,10 @@ import { PlexClient } from "../plex/client";
 import { discoverTrailers } from "./discovery";
 import type { Discovery, PlaybackAttempt, TrailerReport } from "./types";
 export class TrailerService {
-  private cache = new Map<string, { expires: number; data: Discovery }>();
+  private cache = new Map<
+    string,
+    { expires: number; data: Discovery; preferred?: string }
+  >();
   private reports = new Map<string, TrailerReport>();
   constructor(
     readonly client: PlexClient,
@@ -46,9 +49,41 @@ export class TrailerService {
   snapshot() {
     return [...this.reports.values()];
   }
+  canRestartImmediately(id: string): boolean {
+    const cached = this.cache.get(id);
+    return Boolean(cached && cached.expires > this.now() && cached.preferred);
+  }
+  private attemptKey(attempt: PlaybackAttempt): string {
+    const url = new URL(attempt.path, "https://trafirdis.invalid");
+    // Remember the resource and transport, never a transcode session URL.
+    url.searchParams.delete("session");
+    url.searchParams.delete("X-Plex-Session-Identifier");
+    url.searchParams.sort();
+    return JSON.stringify([
+      attempt.kind,
+      attempt.forceMse ?? false,
+      attempt.source,
+      url.pathname,
+      url.search,
+    ]);
+  }
+  rememberPlayback(id: string, discovery: Discovery, attempt: PlaybackAttempt) {
+    const cached = this.cache.get(id);
+    if (cached?.data === discovery && cached.expires > this.now())
+      cached.preferred = this.attemptKey(attempt);
+  }
+  forgetPlayback(id: string, discovery: Discovery, attempt: PlaybackAttempt) {
+    const cached = this.cache.get(id);
+    if (
+      cached?.data === discovery &&
+      cached.preferred === this.attemptKey(attempt)
+    )
+      cached.preferred = undefined;
+  }
   attempts(
     discovery: Discovery,
     canPlay: (mime: string) => string,
+    movieId?: string,
   ): PlaybackAttempt[] {
     const attempts: PlaybackAttempt[] = [];
     for (const candidate of discovery.candidates.slice(0, 6)) {
@@ -110,6 +145,13 @@ export class TrailerService {
           });
         }
       }
+    }
+    const cached = movieId === undefined ? undefined : this.cache.get(movieId);
+    if (cached?.data === discovery && cached.expires > this.now()) {
+      const preferred = attempts.findIndex(
+        (attempt) => this.attemptKey(attempt) === cached.preferred,
+      );
+      if (preferred > 0) attempts.unshift(...attempts.splice(preferred, 1));
     }
     return attempts;
   }

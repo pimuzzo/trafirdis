@@ -145,7 +145,7 @@ Disconnect clears local access and catalog caches; it does not revoke Plex’s A
 
 ## How previews work
 
-1. A stable selection waits **1.5 seconds** before fetching details with `includeExtras=1`. Rapid selections cancel pending work.
+1. A stable selection waits **1.5 seconds** before fetching details with `includeExtras=1`. Rapid selections cancel pending work. Within the five-minute discovery cache, a previously played preview skips this selection delay and tries its last working resource/transport first; this applies to hero scroll return and details reopen/back navigation. Repeats still start from the beginning.
 2. The isolated adapter prefers extras explicitly identified as trailers. `sceneOrSample` extras are secondary previews. Interviews, featurettes, and arbitrary extras are never treated as trailers.
 3. Supported, local Plex media parts are attempted in the native HTML5 video element. `canPlayType` is a capability hint; it is never recorded as playback success.
 4. For indirect assets or incompatible native formats, Trafirdis requests **Plex Media Server's own HLS streaming endpoint** using the extra's key, never the parent movie's key. Every HLS attempt first requests a fresh Plex playback decision with matching stream settings and session/client identifiers; a refused or unsupported decision never starts a manifest. Reopening details and returning to a hidden hero repeat this negotiation while keeping availability metadata cached. Native HLS is used where available. Otherwise a dynamically imported `hls.js` implementation supplies Media Source Extensions playback. If a native HLS attempt fails, an MSE fallback is available.
@@ -265,3 +265,9 @@ Rebuild the Docker image after updating to the fix branch (`docker compose up --
 Network should show a successful `/video/:/transcode/universal/decision` before each new `start.m3u8`, using the same extra and session/settings for that attempt. HTTP 200 for decision alone is not sufficient: Plex must approve conversion. An error remains retryable and must not trigger a full-movie player or any metadata/history update. Inspect locally; do not publish token-bearing URLs or raw Plex logs. A 404 on best-effort cleanup after a failed start does not establish the cause of the playback failure.
 
 Automated tests exercise a synthetic server that refuses unapproved starts, including repeated popup reopen and hero visibility restarts. Actual PMS/provider/codec acceptance remains a separate manual check; explicit negotiation is supported by the observed missing-decision errors, not a guarantee that every real trailer will play.
+
+### Repeat preview startup
+
+Only a real `playing` event establishes the short-lived resource/transport preference. Discovery and URL resolution alone do not. The preference shares the existing in-memory discovery cache (five minutes, at most 60 movies); expiration, eviction, explicit inspection/refresh and disconnect clear it. A failed preferred route falls back to the remaining candidates and loses its preference.
+
+This avoids the artificial selection delay and repeated failed fallback routes. It does not cache video files or HLS manifests, keep inactive players, preload adjacent films or reuse closed Plex sessions. HLS always starts at offset zero with a fresh decision and session, so Plex/network startup time can still be visible. To validate, play A, navigate to B and back to A, then try hero scroll-away/return; check that A restarts from the beginning with one player and a fresh approved session. Real-server timing is separate from the synthetic regression checks.

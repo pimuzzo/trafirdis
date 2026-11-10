@@ -301,3 +301,93 @@ describe("automatic preview lifecycle", () => {
     });
   });
 });
+
+describe("verified preview restart timing", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.mocked(playAttempt).mockReset().mockImplementation(pending);
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+  function setup() {
+    const client = new PlexClient("x");
+    const details = vi.spyOn(client, "details").mockResolvedValue({
+      Extras: {
+        Metadata: [{ key: "/library/metadata/200", subtype: "trailer" }],
+      },
+    });
+    const service = new TrailerService(client);
+    const ref = {
+      current: document.createElement("video"),
+    } as RefObject<HTMLVideoElement>;
+    return { service, ref, details };
+  }
+  const play = (
+    video: unknown,
+    attempt: unknown,
+    client: unknown,
+    signal: AbortSignal,
+    _resolved: () => void,
+    playing: () => void,
+  ) => {
+    playing();
+    return pending(video, attempt, client, signal);
+  };
+  it("removes the repeat delay after playing, without inheriting playback success", async () => {
+    const { service, ref, details } = setup();
+    vi.mocked(playAttempt).mockImplementationOnce(play);
+    const { result, rerender } = renderHook(
+      ({ enabled }) => usePreview(ref, service, "A", enabled, 0),
+      { initialProps: { enabled: true } },
+    );
+    await act(() => vi.advanceTimersByTimeAsync(1499));
+    expect(playAttempt).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(result.current.phase).toBe("playing");
+    const firstSession = vi.mocked(playAttempt).mock.calls[0][1].session;
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(playAttempt).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(playAttempt).mock.calls[1][1].session).not.toBe(
+      firstSession,
+    );
+    expect(details).toHaveBeenCalledOnce();
+    expect(result.current).toMatchObject({
+      phase: "resolving",
+      playbackSucceeded: false,
+      urlResolved: false,
+    });
+  });
+  it("starts A immediately after A → B → A while keeping the delay for new B", async () => {
+    const { service, ref, details } = setup();
+    vi.mocked(playAttempt).mockImplementation(play);
+    const { rerender } = renderHook(
+      ({ id }) => usePreview(ref, service, id, true, 0),
+      { initialProps: { id: "A" } },
+    );
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    rerender({ id: "B" });
+    await act(() => vi.advanceTimersByTimeAsync(1499));
+    expect(playAttempt).toHaveBeenCalledOnce();
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    rerender({ id: "A" });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(playAttempt).toHaveBeenCalledTimes(3);
+    expect(details).toHaveBeenCalledTimes(2);
+  });
+  it("does not warm a cancelled selection from a late playing callback", async () => {
+    const { service, ref } = setup();
+    const { rerender } = renderHook(
+      ({ enabled }) => usePreview(ref, service, "A", enabled, 0),
+      { initialProps: { enabled: true } },
+    );
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    const stalePlaying = vi.mocked(playAttempt).mock.calls[0][5];
+    rerender({ enabled: false });
+    stalePlaying();
+    expect(service.canRestartImmediately("A")).toBe(false);
+  });
+});
