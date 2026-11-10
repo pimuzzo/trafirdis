@@ -57,9 +57,17 @@ async function mockPlex(
     delayed?: boolean;
     allWatched?: boolean;
     libraries?: { key: string; title: string }[];
+    decision?: "denied" | "malformed" | "auth";
   } = {},
 ) {
   const requests: { path: string; method: string; token?: string }[] = [];
+  const decisions = new Map<string, string>();
+  const signature = (url: URL) => {
+    const params = new URLSearchParams(url.search);
+    params.delete("X-Plex-Token");
+    params.sort();
+    return params.toString();
+  };
   const fulfill = (route: Route, MediaContainer: unknown) =>
     route.fulfill({ json: { MediaContainer } });
   await page.route("http://127.0.0.1:5175/plex/**", async (route) => {
@@ -149,7 +157,23 @@ async function mockPlex(
             body: await readFile("tests/fixtures/preview.webm"),
             contentType: "video/webm",
           });
+    if (path.endsWith("/decision")) {
+      if (options.decision === "auth") return route.fulfill({ status: 401 });
+      decisions.set(url.searchParams.get("session")!, signature(url));
+      return fulfill(
+        route,
+        options.decision === "malformed"
+          ? {}
+          : {
+              generalDecisionCode: options.decision === "denied" ? 2000 : 1001,
+              transcodeDecisionCode:
+                options.decision === "denied" ? 4005 : 1001,
+            },
+      );
+    }
     if (path.endsWith("start.m3u8")) {
+      if (decisions.get(url.searchParams.get("session")!) !== signature(url))
+        return route.fulfill({ status: 400, body: "Session lacks decision" });
       if (options.trailer === "broken") return route.fulfill({ status: 404 });
       if (options.trailer === "external")
         return route.fulfill({
@@ -166,7 +190,10 @@ async function mockPlex(
         body: await readFile("tests/fixtures/segment-0.ts"),
         contentType: "video/mp2t",
       });
-    if (path.endsWith("/stop")) return route.fulfill({ status: 200, body: "" });
+    if (path.endsWith("/stop")) {
+      decisions.delete(url.searchParams.get("session")!);
+      return route.fulfill({ status: 200, body: "" });
+    }
     return route.fulfill({ status: 404 });
   });
   return requests;
@@ -1467,3 +1494,92 @@ test("blocked unmuted trailers resume with Play", async ({ page }) => {
     requests.filter((request) => request.path === "/library/metadata/2"),
   ).toHaveLength(1);
 });
+
+test("renegotiates HLS after repeated popup reopen and hero scroll return", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  const events: { path: string; session: string | null }[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (/\/(decision|start\.m3u8|stop)$/.test(url.pathname))
+      events.push({
+        path: url.pathname,
+        session: url.searchParams.get("session"),
+      });
+  });
+  const requests = await mockPlex(page, { trailer: "hls" });
+  await connect(page);
+  const hero = page.locator(".hero");
+  const playing = async (host: ReturnType<Page["locator"]>) => {
+    await expect(host.locator("[data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "playing",
+    );
+    await expect(page.locator("video")).toHaveCount(1);
+  };
+  await playing(hero);
+  for (let i = 0; i < 2; i++) {
+    await hero.getByRole("button", { name: "More info" }).click();
+    await playing(page.getByRole("dialog"));
+    await page.keyboard.press("Escape");
+    await playing(hero);
+  }
+  await hero.getByRole("button", { name: "Unmute preview" }).click();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect(hero.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "paused",
+  );
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await playing(hero);
+  expect(await hero.locator("video").evaluate((video) => video.muted)).toBe(
+    false,
+  );
+  const starts = events.filter((event) => event.path.endsWith("start.m3u8"));
+  expect(
+    new Set(starts.map((event) => event.session)).size,
+  ).toBeGreaterThanOrEqual(6);
+  for (const start of starts) {
+    const position = events.indexOf(start);
+    expect(
+      events
+        .slice(0, position)
+        .some(
+          (event) =>
+            event.path.endsWith("/decision") && event.session === start.session,
+        ),
+    ).toBe(true);
+  }
+  // Restarts do not depend on invalidating the metadata cache.
+  expect(
+    requests.filter((request) => request.path === "/library/metadata/1"),
+  ).toHaveLength(1);
+  expect(
+    requests.some((request) =>
+      /timeline|scrobble|playQueues/.test(request.path),
+    ),
+  ).toBe(false);
+});
+
+for (const decision of ["denied", "malformed", "auth"] as const) {
+  test(`does not load HLS after a ${decision} playback decision`, async ({
+    page,
+  }) => {
+    const requests = await mockPlex(page, { trailer: "hls", decision });
+    await connect(page);
+    await expect(page.locator(".hero [data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "error",
+    );
+    expect(requests.some((request) => request.path.endsWith("/decision"))).toBe(
+      true,
+    );
+    expect(
+      requests.some((request) => request.path.endsWith("start.m3u8")),
+    ).toBe(false);
+    await expect(
+      page.getByRole("button", { name: "Retry preview" }),
+    ).toBeEnabled();
+  });
+}

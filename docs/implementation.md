@@ -76,3 +76,9 @@ The preference stays in memory for the mounted hero preview. Opening details rem
 Both preview surfaces show a small amber spinner inside Finding your preview while waiting, discovering or loading media. It replaces the status dot and respects reduced-motion preferences. Artwork remains visible until playback starts; the text status is announced politely.
 
 Play is disabled during loading and when Plex has no playable trailer resource. It remains available to resume a pause, retry a failure, replay an ended trailer or start a browser-blocked source directly from a user gesture. Tests hold synthetic metadata and media responses to verify loading controls on the hero and details, and verify missing trailers, retry recovery and existing autoplay/audio behavior. No playback transport, Plex operation or dependency changes.
+
+## Preview playback decision follow-up
+
+The existing PRD now defines restart reliability for hero and details previews. HLS playback requests a fresh, validated PMS decision before loading any manifest, with the same extra, settings and session/client identity as start. Decision approval alone never marks a URL resolved or playback verified. Denied/unknown responses cannot start a stream, authentication failures stop candidate fallback, and cancellation/timeout prevents late approvals from attaching stale sources. Existing metadata caching, native parts, audio preferences and scoped cleanup remain in place.
+
+Unit tests cover decision validation, credential handling, cancellation and startup timeout. Browser and production Docker fixtures reject starts without matching decisions and exercise repeated popup reopen and hero scroll-away/return using synthetic media. Real PMS restart acceptance remains pending; private diagnostic logs are not repository assets.

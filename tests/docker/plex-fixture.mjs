@@ -14,6 +14,13 @@ const movie = {
   thumb: "/library/metadata/1/thumb/1",
   art: "/library/metadata/1/art/1",
 };
+const decisions = new Map();
+const signature = (url) => {
+  const params = new URLSearchParams(url.search);
+  params.delete("X-Plex-Token");
+  params.sort();
+  return params.toString();
+};
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://plex-fixture:32400");
   const token =
@@ -96,7 +103,30 @@ const server = createServer((req, res) => {
     res.end(video.subarray(start, end + 1));
     return;
   }
+  if (url.pathname.endsWith("/decision")) {
+    decisions.set(url.searchParams.get("session"), {
+      signature: signature(url),
+      token,
+    });
+    json({
+      MediaContainer: {
+        generalDecisionCode: 1001,
+        transcodeDecisionCode: 1001,
+      },
+    });
+    return;
+  }
   if (url.pathname.endsWith("/start.m3u8")) {
+    const decision = decisions.get(url.searchParams.get("session"));
+    if (
+      !decision ||
+      decision.signature !== signature(url) ||
+      decision.token !== token
+    ) {
+      res.writeHead(400);
+      res.end("Session lacks decision");
+      return;
+    }
     res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
     res.end(readFileSync("/fixtures/preview.m3u8"));
     return;
@@ -107,6 +137,7 @@ const server = createServer((req, res) => {
     return;
   }
   if (url.pathname.endsWith("/stop")) {
+    decisions.delete(url.searchParams.get("session"));
     res.end();
     return;
   }

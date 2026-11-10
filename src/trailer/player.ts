@@ -55,10 +55,12 @@ export async function playAttempt(
   }
   return new Promise<void>((resolve, reject) => {
     let settled = false;
+    const startup = new AbortController();
     let awaitingGesture = false;
     let timer: ReturnType<typeof setTimeout>;
     const cleanup = () => {
       clearTimeout(timer);
+      startup.abort();
       signal.removeEventListener("abort", abort);
       video.removeEventListener("loadedmetadata", metadata);
       video.removeEventListener("playing", playing);
@@ -137,50 +139,56 @@ export async function playAttempt(
     video.loop = false;
     video.playsInline = true;
     armTimeout();
-    if (Hls) {
-      hls = new Hls({
-        debug: false,
-        enableWorker: true,
-        maxBufferLength: 15,
-        maxMaxBufferLength: 30,
-        manifestLoadingMaxRetry: 0,
-        fragLoadingMaxRetry: 0,
-        xhrSetup: (xhr, url) => {
-          // Never send tokens to remote URLs embedded in a provider playlist.
-          const target = new URL(url, window.location.origin);
-          if (
-            target.origin !== window.location.origin ||
-            !target.pathname.startsWith("/plex/")
-          )
-            throw new PlaybackError(
-              "network",
-              "Plex returned a stream outside the configured server proxy.",
+    const start = async () => {
+      if (attempt.kind === "hls")
+        await client.preparePreview(attempt.path, startup.signal);
+      if (settled || signal.aborted) return;
+      if (Hls) {
+        hls = new Hls({
+          debug: false,
+          enableWorker: true,
+          maxBufferLength: 15,
+          maxMaxBufferLength: 30,
+          manifestLoadingMaxRetry: 0,
+          fragLoadingMaxRetry: 0,
+          xhrSetup: (xhr, url) => {
+            // Never send tokens to remote URLs embedded in a provider playlist.
+            const target = new URL(url, window.location.origin);
+            if (
+              target.origin !== window.location.origin ||
+              !target.pathname.startsWith("/plex/")
+            )
+              throw new PlaybackError(
+                "network",
+                "Plex returned a stream outside the configured server proxy.",
+              );
+            xhr.setRequestHeader("X-Plex-Token", client.authHeader());
+          },
+        });
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          metadata();
+          play();
+        });
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (data.fatal)
+            finish(
+              new PlaybackError(
+                data.type === "mediaError" ? "unsupported" : "network",
+                data.type === "mediaError"
+                  ? "The browser could not decode Plex’s HLS stream."
+                  : "Plex’s HLS stream could not be loaded.",
+              ),
             );
-          xhr.setRequestHeader("X-Plex-Token", client.authHeader());
-        },
-      });
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        metadata();
+        });
+        hls.loadSource(client.resource(attempt.path));
+        hls.attachMedia(video);
+      } else {
+        video.src = client.resource(attempt.path);
+        video.load();
         play();
-      });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal)
-          finish(
-            new PlaybackError(
-              data.type === "mediaError" ? "unsupported" : "network",
-              data.type === "mediaError"
-                ? "The browser could not decode Plex’s HLS stream."
-                : "Plex’s HLS stream could not be loaded.",
-            ),
-          );
-      });
-      hls.loadSource(client.resource(attempt.path));
-      hls.attachMedia(video);
-    } else {
-      video.src = client.resource(attempt.path);
-      video.load();
-      play();
-    }
+      }
+    };
+    void start().catch((error: unknown) => finish(error));
     if (signal.aborted) abort();
   });
 }

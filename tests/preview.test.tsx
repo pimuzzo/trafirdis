@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RefObject } from "react";
 import { usePreview } from "../src/hooks/usePreview";
 import { TrailerService } from "../src/trailer/service";
-import { PlexClient } from "../src/plex/client";
+import { PlexClient, PlexError } from "../src/plex/client";
 import { playAttempt, PlaybackError } from "../src/trailer/player";
 vi.mock("../src/trailer/player", () => ({
   playAttempt: vi.fn(),
@@ -161,6 +161,35 @@ describe("automatic preview lifecycle", () => {
     await act(() => vi.advanceTimersByTimeAsync(10000));
     expect(playAttempt).toHaveBeenCalledTimes(2);
   });
+  it.each([400, 401])(
+    "preserves decision HTTP %s and stops fallback on authentication failure",
+    async (status) => {
+      const { service, ref } = setup();
+      vi.spyOn(service, "attempts").mockReturnValue([
+        { path: "/first", kind: "hls", source: "Plex trailer" },
+        { path: "/second", kind: "hls", source: "Plex trailer" },
+      ]);
+      vi.mocked(playAttempt).mockRejectedValue(
+        new PlexError(
+          status === 401 ? "auth" : "response",
+          "Safe decision failure",
+          status,
+        ),
+      );
+      const { result } = renderHook(() =>
+        usePreview(ref, service, "A", true, 0),
+      );
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(result.current).toMatchObject({
+        phase: "error",
+        failure: status === 401 ? "auth" : "response",
+        httpStatus: status,
+        reason: "Safe decision failure",
+        playbackSucceeded: false,
+      });
+      expect(playAttempt).toHaveBeenCalledTimes(status === 401 ? 1 : 2);
+    },
+  );
   it("reports unavailable metadata without trying to load a video", async () => {
     const { service, discover, ref } = setup();
     discover.mockResolvedValue({

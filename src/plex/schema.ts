@@ -34,6 +34,8 @@ export interface PlexMetadata {
   Extras?: { Metadata?: PlexMetadata[] };
 }
 export interface PlexContainer {
+  generalDecisionCode?: number;
+  transcodeDecisionCode?: number;
   friendlyName?: string;
   machineIdentifier?: string;
   version?: string;

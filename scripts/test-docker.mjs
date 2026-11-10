@@ -318,6 +318,47 @@ try {
     true,
   );
   assert.deepEqual(errors, []);
+  // The fixture rejects every HLS start without a matching fresh decision.
+  for (let i = 0; i < 2; i++) {
+    await page
+      .locator(".hero")
+      .getByRole("button", { name: "More info" })
+      .click();
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector(".details-dialog [data-preview-phase]")
+          ?.getAttribute("data-preview-phase") === "playing",
+    );
+    assert.equal(await page.locator("video").count(), 1);
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector(".hero [data-preview-phase]")
+          ?.getAttribute("data-preview-phase") === "playing",
+    );
+  }
+  await page.evaluate(() => {
+    const spacer = document.createElement("div");
+    spacer.style.height = "1500px";
+    document.body.append(spacer);
+    window.scrollTo(0, document.body.scrollHeight);
+  });
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector(".hero [data-preview-phase]")
+        ?.getAttribute("data-preview-phase") === "paused",
+  );
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector(".hero [data-preview-phase]")
+        ?.getAttribute("data-preview-phase") === "playing",
+  );
+  assert.deepEqual(errors, []);
   // Exercise hosted authorization through the actual production SPA callback.
   await page.getByRole("button", { name: "Connection settings" }).click();
   await page

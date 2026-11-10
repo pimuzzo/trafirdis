@@ -83,6 +83,29 @@ export class PlexClient {
   authHeader(): string {
     return this.token;
   }
+  async preparePreview(path: string, signal: AbortSignal): Promise<void> {
+    const url = new URL(this.safePath(path), "https://trafirdis.invalid");
+    if (url.pathname !== "/video/:/transcode/universal/start.m3u8")
+      throw new PlexError("unsafe", "Unsupported preview streaming route.");
+    // Use exactly the start request's media, settings and playback identity.
+    url.pathname = "/video/:/transcode/universal/decision";
+    const decision = await this.request(
+      `${url.pathname}${url.search}`,
+      signal,
+      "no-store",
+    );
+    signal.throwIfAborted();
+    // The documented conversion-OK response is 1001. Never treat HTTP 200,
+    // direct-play-only approval or an unknown response as permission for HLS.
+    if (
+      ![1000, 1001].includes(decision.generalDecisionCode ?? 0) ||
+      decision.transcodeDecisionCode !== 1001
+    )
+      throw new PlexError(
+        "response",
+        "Plex did not approve this trailer's streaming conversion.",
+      );
+  }
   async stopPreviewSession(session: string): Promise<void> {
     // Legacy PMS cleanup route; this never reports watch progress or scrobbles.
     try {
@@ -99,7 +122,11 @@ export class PlexClient {
       /* Plex also expires abandoned sessions. */
     }
   }
-  async request(path: string, signal?: AbortSignal): Promise<PlexContainer> {
+  async request(
+    path: string,
+    signal?: AbortSignal,
+    cache?: RequestCache,
+  ): Promise<PlexContainer> {
     const timeout = AbortSignal.timeout(12000);
     try {
       const response = await this.fetcher(
@@ -109,6 +136,7 @@ export class PlexClient {
           signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
           redirect: "error",
           credentials: "omit",
+          cache,
         },
       );
       if (response.status === 401 || response.status === 403)

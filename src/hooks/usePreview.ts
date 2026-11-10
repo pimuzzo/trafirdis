@@ -71,6 +71,7 @@ export function usePreview(
         }
         let lastFailure = "No playable trailer stream was found.";
         let failure: TrailerFailure = "unknown";
+        let httpStatus: number | undefined;
         for (const attempt of attempts) {
           controller.signal.throwIfAborted();
           publish({
@@ -82,6 +83,7 @@ export function usePreview(
             playbackSucceeded: false,
             reason: undefined,
             failure: undefined,
+            httpStatus: undefined,
           });
           try {
             await playAttempt(
@@ -114,6 +116,7 @@ export function usePreview(
             return;
           } catch (error) {
             if (controller.signal.aborted) return;
+            httpStatus = undefined;
             if (error instanceof PlaybackError) {
               lastFailure = error.message;
               failure = error.code;
@@ -121,13 +124,18 @@ export function usePreview(
                 publish({ phase: "blocked", reason: lastFailure, failure });
                 return;
               }
+            } else if (error instanceof PlexError) {
+              if (error.code === "auth") throw error;
+              lastFailure = error.message;
+              failure = error.code;
+              httpStatus = error.status;
             } else {
               lastFailure = "The trailer stream could not be played.";
               failure = "unknown";
             }
           }
         }
-        publish({ phase: "error", reason: lastFailure, failure });
+        publish({ phase: "error", reason: lastFailure, failure, httpStatus });
       } catch (error) {
         if (!controller.signal.aborted)
           publish({
