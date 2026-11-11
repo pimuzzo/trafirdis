@@ -70,7 +70,7 @@ export function MovieDetails({
   preview?: ReactNode;
   rail: Rail;
   index: number;
-  onNavigate: (index: number) => void;
+  onNavigate?: (index: number) => void;
 }) {
   const [copiedId, setCopiedId] = useState("");
   const copied = copiedId === movie.id;
@@ -96,6 +96,7 @@ export function MovieDetails({
     }
   }, [movie.id]);
   const navigate = (direction: number) => {
+    if (!onNavigate) return;
     const next = index + direction;
     if (next >= 0 && next < rail.movies.length) onNavigate(next);
   };
@@ -106,6 +107,7 @@ export function MovieDetails({
       className="details-dialog"
       onKeyDown={(event) => {
         if (
+          !onNavigate ||
           event.altKey ||
           event.ctrlKey ||
           event.metaKey ||
@@ -127,6 +129,7 @@ export function MovieDetails({
         onTouchStart={(event) => {
           touch.current = null;
           if (
+            !onNavigate ||
             event.touches.length !== 1 ||
             (event.target as HTMLElement).closest(
               "button, a, input, select, video, .details-visual",
@@ -152,33 +155,38 @@ export function MovieDetails({
             navigate(dx < 0 ? 1 : -1);
         }}
       >
-        <div className="details-navigation">
-          <div className="details-context">
-            <span className="eyebrow accent">{rail.title}</span>
-            <span className="details-position" role="status">
-              <span className="sr-only">{movie.title}, </span>
-              {index + 1} of {rail.movies.length}
-            </span>
+        {onNavigate && (
+          <div className="details-navigation">
+            <div className="details-context">
+              <span className="eyebrow accent">{rail.title}</span>
+              <span className="details-position" role="status">
+                <span className="sr-only">{movie.title}, </span>
+                {index + 1} of {rail.movies.length}
+              </span>
+            </div>
+            <nav
+              className="details-stepper"
+              aria-label="Movies in this category"
+            >
+              <button
+                className="icon-button"
+                aria-label="Previous movie"
+                disabled={index === 0}
+                onClick={() => navigate(-1)}
+              >
+                <Icon name="arrow" style={{ transform: "rotate(180deg)" }} />
+              </button>
+              <button
+                className="icon-button"
+                aria-label="Next movie"
+                disabled={index === rail.movies.length - 1}
+                onClick={() => navigate(1)}
+              >
+                <Icon name="arrow" />
+              </button>
+            </nav>
           </div>
-          <nav className="details-stepper" aria-label="Movies in this category">
-            <button
-              className="icon-button"
-              aria-label="Previous movie"
-              disabled={index === 0}
-              onClick={() => navigate(-1)}
-            >
-              <Icon name="arrow" style={{ transform: "rotate(180deg)" }} />
-            </button>
-            <button
-              className="icon-button"
-              aria-label="Next movie"
-              disabled={index === rail.movies.length - 1}
-              onClick={() => navigate(1)}
-            >
-              <Icon name="arrow" />
-            </button>
-          </nav>
-        </div>
+        )}
         <div className="details-visual">
           <Artwork movie={movie} client={client} kind="art" eager />
           {preview}

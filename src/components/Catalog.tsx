@@ -76,9 +76,11 @@ export default function Catalog({
   const [filters, setFilters] = useState(emptyFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState("");
-  const [details, setDetails] = useState<{ rail: Rail; index: number } | null>(
-    null,
-  );
+  const [details, setDetails] = useState<{
+    rail: Rail;
+    index: number;
+    categoryNavigation: boolean;
+  } | null>(null);
   const [settings, setSettings] = useState(false);
   const server = useQuery({
     queryKey: ["server"],
@@ -143,11 +145,12 @@ export default function Catalog({
   const select = (movie: Movie) => {
     setSelected(movie.id);
   };
-  const showDetails = (movie: Movie, rail: Rail) => {
+  const showDetails = (movie: Movie, category?: Rail) => {
+    const rail = category ?? { title: "Movie library", movies: [movie] };
     const index = rail.movies.findIndex((item) => item.id === movie.id);
     if (index < 0) return;
     setSelected(movie.id);
-    setDetails({ rail, index });
+    setDetails({ rail, index, categoryNavigation: Boolean(category) });
   };
   const refresh = () => {
     trailers?.clear();
@@ -242,9 +245,7 @@ export default function Catalog({
           canRandomize={featuredState.canRandomize}
           previewVisible={!details && !isPhone}
           previewEnabled={!settings && !diagnostics}
-          onDetails={(movie) =>
-            showDetails(movie, { title: "Movie library", movies })
-          }
+          onDetails={(movie) => showDetails(movie)}
         />
       )}
       <main id="catalog" className="catalog" tabIndex={-1}>
@@ -394,12 +395,16 @@ export default function Catalog({
           movie={details.rail.movies[details.index]}
           rail={details.rail}
           index={details.index}
-          onNavigate={(index) => {
-            if (index >= 0 && index < details.rail.movies.length) {
-              setSelected(details.rail.movies[index].id);
-              setDetails({ ...details, index });
-            }
-          }}
+          onNavigate={
+            details.categoryNavigation
+              ? (index) => {
+                  if (index >= 0 && index < details.rail.movies.length) {
+                    setSelected(details.rail.movies[index].id);
+                    setDetails({ ...details, index });
+                  }
+                }
+              : undefined
+          }
           client={client}
           server={connectedServer}
           onClose={() => setDetails(null)}
@@ -428,7 +433,7 @@ export default function Catalog({
               selectFeatured(movie.id);
               setSelected(movie.id);
               if (isPhone) {
-                showDetails(movie, { title: "Movie library", movies });
+                showDetails(movie);
               } else {
                 setDetails(null);
               }

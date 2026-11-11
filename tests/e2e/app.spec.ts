@@ -1039,6 +1039,56 @@ test("lower rail focus stays quiet and opens a trailer only in details", async (
   ).toBe(false);
 });
 
+for (const width of [1440, 390]) {
+  test(`hero details have no category navigation at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockPlex(page, { trailer: "missing" });
+    await connect(page);
+    const opener = page.getByRole("button", { name: "More info" });
+    await opener.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator(".details-navigation")).toHaveCount(0);
+    await expect(dialog.locator(".details-position")).toHaveCount(0);
+    await expect(
+      dialog.getByRole("button", { name: "Previous movie" }),
+    ).toHaveCount(0);
+    await expect(
+      dialog.getByRole("button", { name: "Next movie" }),
+    ).toHaveCount(0);
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowLeft");
+    await dialog.locator(".details-copy").evaluate((element) => {
+      const touch = (x: number) =>
+        new Touch({ identifier: 1, target: element, clientX: x, clientY: 500 });
+      element.dispatchEvent(
+        new TouchEvent("touchstart", { bubbles: true, touches: [touch(150)] }),
+      );
+      element.dispatchEvent(
+        new TouchEvent("touchend", {
+          bubbles: true,
+          changedTouches: [touch(30)],
+        }),
+      );
+    });
+    await expect(
+      dialog.getByRole("heading", { name: "First Light", exact: true }),
+    ).toBeVisible();
+    await dialog
+      .getByRole("button", { name: "Close First Light details" })
+      .click();
+    await expect(opener).toBeFocused();
+
+    await recentCards(page).first().click();
+    await expect(dialog.getByRole("status")).toContainText("1 of 3");
+    await dialog.getByRole("button", { name: "Next movie" }).click();
+    await expect(
+      dialog.getByRole("heading", { name: "Second Chance", exact: true }),
+    ).toBeVisible();
+  });
+}
+
 test("details navigation stays in the opening category and restores focus and page position", async ({
   page,
 }) => {
@@ -1286,14 +1336,13 @@ test("hero is randomly chosen and stays stable through hover, filters and detail
       .getByRole("dialog")
       .getByRole("heading", { name: "Third Shore", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Previous movie" })
-    .click();
+  await expect(page.locator(".details-navigation")).toHaveCount(0);
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowRight");
   await expect(
     page
       .getByRole("dialog")
-      .getByRole("heading", { name: "Second Chance", exact: true }),
+      .getByRole("heading", { name: "Third Shore", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(hero.locator("h1")).toHaveText("Third Shore");
@@ -1592,7 +1641,7 @@ for (const engine of ["native", "mse"] as const) {
     const first = await hero.locator("video").elementHandle();
     const source = await first!.evaluate((video) => video.src);
     await hero.getByRole("button", { name: "Unmute preview" }).click();
-    await hero.getByRole("button", { name: "More info" }).click();
+    await recentCards(page).first().click();
     const dialog = page.getByRole("dialog");
     await playing(dialog);
     expect(await dialog.locator("video").evaluate((video) => video.src)).toBe(
@@ -1708,7 +1757,7 @@ test("a failed retained restart rebuilds through a fresh approved Plex session",
     "playing",
   );
   const first = await hero.locator("video").elementHandle();
-  await hero.getByRole("button", { name: "More info" }).click();
+  await recentCards(page).first().click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.locator("[data-preview-phase]")).toHaveAttribute(
     "data-preview-phase",
