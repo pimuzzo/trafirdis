@@ -56,9 +56,11 @@ a {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+.search-field:focus-within,
+.manual-login summary:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 5px;
+  outline-offset: 1px;
 }
 button {
   border: 0;
@@ -428,10 +430,6 @@ input::placeholder {
   padding-left: 6px;
   border-radius: 5px;
 }
-.search-field:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
 .search input:focus-visible {
   outline: none;
 }
@@ -758,7 +756,6 @@ input::placeholder {
   scroll-snap-align: start;
   border-radius: 5px;
   color: #d9d9dd;
-  outline-offset: 4px !important;
 }
 .poster-wrap {
   aspect-ratio: 2/3;
@@ -1573,10 +1570,6 @@ input::placeholder {
   color: #f0f1f4;
   font: inherit;
 }
-.diagnostics-search input:focus-visible {
-  outline: 2px solid #d3ac68;
-  outline-offset: 2px;
-}
 .diagnostics-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1731,10 +1724,6 @@ td {
   padding: 12px;
   border-radius: 6px;
   margin: 16px 0;
-}
-.manual-login summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 5px;
 }
 
 .privacy-note a,
