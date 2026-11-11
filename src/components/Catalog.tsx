@@ -427,7 +427,11 @@ export default function Catalog({
               setFilters(emptyFilters);
               selectFeatured(movie.id);
               setSelected(movie.id);
-              setDetails(null);
+              if (isPhone) {
+                showDetails(movie, { title: "Movie library", movies });
+              } else {
+                setDetails(null);
+              }
               setDiagnostics(false);
               window.scrollTo({ top: 0, behavior: "instant" });
             }}

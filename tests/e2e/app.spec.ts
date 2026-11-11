@@ -777,50 +777,62 @@ test("diagnostics report failed playback without classifying it as missing metad
     row.getByRole("cell", { name: "Failed", exact: true }),
   ).toBeVisible();
 });
-test("diagnostics can test a searched movie outside the current catalog filters", async ({
-  page,
-}) => {
-  const requests = await mockPlex(page, { trailer: "direct" });
-  await connect(page);
-  await page.getByLabel("Search movies").fill("First Light");
-  await page.getByRole("button", { name: "Connection settings" }).click();
-  await page.getByRole("button", { name: "Trailer diagnostics" }).click();
-  await page.getByLabel("Find a movie to inspect").fill("Third Shore");
-  await page.getByRole("button", { name: "Inspect sample metadata" }).click();
-  await expect(page.getByRole("dialog")).toContainText(
-    "Metadata found; playback not verified",
-  );
-  expect(
-    requests.some((request) => request.path.startsWith("/library/parts/3/")),
-  ).toBe(false);
-  await page.getByRole("button", { name: "Test preview" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Third Shore", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByLabel("Search movies")).toHaveValue("");
-  await expect(page.locator("[data-preview-phase]")).toHaveAttribute(
-    "data-preview-phase",
-    "playing",
-    { timeout: 10000 },
-  );
-  await page.getByRole("button", { name: "Connection settings" }).click();
-  await page.getByRole("button", { name: "Trailer diagnostics" }).click();
-  await expect(
-    page.getByRole("row").filter({ hasText: "Third Shore" }),
-  ).toContainText("Playback verified");
-  const downloaded = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download report" }).click();
-  const report = JSON.parse(
-    await readFile((await (await downloaded).path())!, "utf8"),
-  );
-  expect(report.checks[0]).toMatchObject({
-    movieId: "3",
-    metadataFound: true,
-    urlResolved: true,
-    playbackSucceeded: true,
-    method: "Native direct play",
+for (const width of [1440, 390]) {
+  test(`diagnostics can test a searched movie outside the current catalog filters at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const requests = await mockPlex(page, { trailer: "direct" });
+    await connect(page);
+    await page.getByLabel("Search movies").fill("First Light");
+    await page.getByRole("button", { name: "Connection settings" }).click();
+    await page.getByRole("button", { name: "Trailer diagnostics" }).click();
+    await page.getByLabel("Find a movie to inspect").fill("Third Shore");
+    await page.getByRole("button", { name: "Inspect sample metadata" }).click();
+    await expect(page.getByRole("dialog")).toContainText(
+      "Metadata found; playback not verified",
+    );
+    expect(
+      requests.some((request) => request.path.startsWith("/library/parts/3/")),
+    ).toBe(false);
+    await page.getByRole("button", { name: "Test preview" }).click();
+    await expect(
+      page
+        .locator(width <= 540 ? ".details-dialog" : ".hero")
+        .getByRole("heading", { name: "Third Shore", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Search movies")).toHaveValue("");
+    await expect(page.locator("[data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "playing",
+      { timeout: 10000 },
+    );
+    if (width <= 540) {
+      await expect(page.locator(".hero [data-preview-phase]")).toHaveCount(0);
+      await page
+        .getByRole("button", { name: "Close Third Shore details" })
+        .click();
+      await expect(page.locator("video")).toHaveCount(0);
+    }
+    await page.getByRole("button", { name: "Connection settings" }).click();
+    await page.getByRole("button", { name: "Trailer diagnostics" }).click();
+    await expect(
+      page.getByRole("row").filter({ hasText: "Third Shore" }),
+    ).toContainText("Playback verified");
+    const downloaded = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download report" }).click();
+    const report = JSON.parse(
+      await readFile((await (await downloaded).path())!, "utf8"),
+    );
+    expect(report.checks[0]).toMatchObject({
+      movieId: "3",
+      metadataFound: true,
+      urlResolved: true,
+      playbackSucceeded: true,
+      method: "Native direct play",
+    });
   });
-});
+}
 test("cancelling diagnostics stops the sample and ignores a late metadata response", async ({
   page,
 }) => {
@@ -939,6 +951,48 @@ test("small screens have no horizontal overflow and dialogs stay usable", async 
     .getByRole("button", { name: "Close The Quiet Orbit details" })
     .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("phone hero stays quiet while details and wider viewports can play trailers", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 540, height: 844 });
+  const requests = await mockPlex(page, { trailer: "direct" });
+  await connect(page);
+  await expect(page.locator(".hero h1")).toHaveText("First Light");
+  await expect(page.locator(".hero [data-preview-phase]")).toHaveCount(0);
+  await page.waitForTimeout(1800);
+  expect(requests.some((r) => /^\/library\/metadata\/\d+$/.test(r.path))).toBe(
+    false,
+  );
+  expect(requests.some((r) => r.path.startsWith("/library/parts/"))).toBe(
+    false,
+  );
+
+  await page.getByRole("button", { name: "More info" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  await expect(page.locator("video")).toHaveCount(1);
+  await page.getByRole("button", { name: "Close First Light details" }).click();
+  await expect(page.locator("video")).toHaveCount(0);
+  const before = requests.filter((r) =>
+    r.path.startsWith("/library/parts/"),
+  ).length;
+  await page.waitForTimeout(1800);
+  expect(
+    requests.filter((r) => r.path.startsWith("/library/parts/")),
+  ).toHaveLength(before);
+
+  await page.setViewportSize({ width: 541, height: 844 });
+  await expect(page.locator(".hero [data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  await page.setViewportSize({ width: 540, height: 844 });
+  await expect(page.locator("video")).toHaveCount(0);
 });
 
 test("lower rail focus stays quiet and opens a trailer only in details", async ({

@@ -260,9 +260,10 @@ export default function Diagnostics({
         </div>
         <p className="subtle">
           Test preview closes this panel, clears catalog filters and selects the
-          film in the hero. Reopen diagnostics to see the observed result. Only
-          actual playback verifies a trailer. Reports are created locally and
-          are never uploaded automatically.
+          film in the hero, or opens its details on small screens. Reopen
+          diagnostics to see the observed result. Only actual playback verifies
+          a trailer. Reports are created locally and are never uploaded
+          automatically.
         </p>
       </div>
     </Dialog>
