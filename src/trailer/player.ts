@@ -63,13 +63,27 @@ export async function playAttempt(
     let suspended = false;
     const startup = new AbortController();
     let awaitingGesture = false;
+    let awaitingFrame = false;
+    let frameCallback: number | undefined;
+    let frameGeneration = 0;
     let timer: ReturnType<typeof setTimeout>;
+    const cancelFrame = () => {
+      frameGeneration++;
+      awaitingFrame = false;
+      if (frameCallback !== undefined) {
+        video.cancelVideoFrameCallback(frameCallback);
+        frameCallback = undefined;
+      }
+    };
     const cleanup = () => {
       clearTimeout(timer);
+      cancelFrame();
       startup.abort();
       signal.removeEventListener("abort", abort);
       video.removeEventListener("loadedmetadata", metadata);
       video.removeEventListener("playing", playing);
+      video.removeEventListener("loadeddata", fallbackFrame);
+      video.removeEventListener("timeupdate", fallbackFrame);
       video.removeEventListener("play", requested);
       video.removeEventListener("error", error);
       video.removeEventListener("ended", ended);
@@ -103,14 +117,38 @@ export async function playAttempt(
     const metadata = () => {
       if (!settled) onResolved();
     };
+    const presented = () => {
+      if (settled || suspended || !awaitingFrame) return;
+      awaitingFrame = false;
+      clearTimeout(timer);
+      onPlaying();
+    };
+    const fallbackFrame = () => {
+      if (
+        typeof video.requestVideoFrameCallback !== "function" &&
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        video.videoWidth > 0 &&
+        video.videoHeight > 0
+      )
+        presented();
+    };
     const playing = () => {
       if (suspended) {
         video.pause();
         return;
       }
       awaitingGesture = false;
-      clearTimeout(timer);
-      if (!settled) onPlaying();
+      if (settled) return;
+      cancelFrame();
+      awaitingFrame = true;
+      if (typeof video.requestVideoFrameCallback === "function") {
+        const current = frameGeneration;
+        frameCallback = video.requestVideoFrameCallback(() => {
+          if (current !== frameGeneration) return;
+          frameCallback = undefined;
+          presented();
+        });
+      } else fallbackFrame();
     };
     const waiting = () => {
       if (!settled && !awaitingGesture && !suspended) armTimeout();
@@ -141,6 +179,8 @@ export async function playAttempt(
     };
     video.addEventListener("loadedmetadata", metadata);
     video.addEventListener("playing", playing);
+    video.addEventListener("loadeddata", fallbackFrame);
+    video.addEventListener("timeupdate", fallbackFrame);
     video.addEventListener("play", requested);
     video.addEventListener("error", error);
     video.addEventListener("ended", ended);
@@ -200,6 +240,7 @@ export async function playAttempt(
       onControl?.({
         suspend: () => {
           suspended = true;
+          cancelFrame();
           clearTimeout(timer);
           video.pause();
           video.muted = true;
@@ -208,6 +249,7 @@ export async function playAttempt(
         },
         restart: () => {
           if (settled || signal.aborted) return false;
+          cancelFrame();
           suspended = false;
           video.currentTime = 0;
           hls?.startLoad(0);

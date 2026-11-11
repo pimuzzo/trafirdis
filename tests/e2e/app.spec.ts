@@ -646,6 +646,62 @@ test("plays Plex HLS through the lazy fallback in Chromium", async ({
     .toBe(true);
 });
 for (const surface of ["hero", "details"] as const) {
+  test(`${surface} keeps artwork and loading status until a video frame is presented`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const requestFrame = HTMLVideoElement.prototype.requestVideoFrameCallback;
+      const cancelFrame = HTMLVideoElement.prototype.cancelVideoFrameCallback;
+      const pending = new Map<number, () => void>();
+      let released = false;
+      HTMLVideoElement.prototype.requestVideoFrameCallback = function (
+        callback,
+      ) {
+        const video = this;
+        const id = requestFrame.call(video, (now, metadata) => {
+          video.dataset.frameReady = "true";
+          if (released) callback(now, metadata);
+          else pending.set(id, () => callback(now, metadata));
+        });
+        return id;
+      };
+      HTMLVideoElement.prototype.cancelVideoFrameCallback = function (id) {
+        pending.delete(id);
+        cancelFrame.call(this, id);
+      };
+      document.addEventListener("test:release-video-frames", () => {
+        released = true;
+        for (const callback of pending.values()) callback();
+        pending.clear();
+      });
+    });
+    await mockPlex(page, { trailer: "direct" });
+    await connect(page);
+    if (surface === "details") await recentCards(page).nth(1).click();
+    const host = page.locator(surface === "hero" ? ".hero" : ".details-dialog");
+    const video = host.locator("video");
+    await expect(video).toHaveAttribute("data-frame-ready", "true");
+    await expect(host.locator(".preview-state")).toHaveText(
+      "Finding your preview",
+    );
+    await expect(host.locator(".preview-spinner")).toBeVisible();
+    await expect(video).toHaveCSS("opacity", "0");
+    await expect(
+      host.getByRole("button", { name: "Play preview", exact: true }),
+    ).toBeDisabled();
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event("test:release-video-frames")),
+    );
+    await expect(host.locator("[data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "playing",
+    );
+    await expect(host.locator(".preview-state")).toHaveText("Preview playing");
+    await expect(video).toHaveCSS("opacity", "1");
+    await expect(video).toHaveCSS("transition-duration", "0.6s");
+    await expect(host.locator(".preview-spinner")).toHaveCount(0);
+  });
+
   test(`${surface} disables Play and shows status loading until media starts`, async ({
     page,
   }) => {
