@@ -1,12 +1,12 @@
 # PRD — Trafirdis
 
-Product naming has been updated to Trafirdis; the original MVP requirements are unchanged.
+This document records the implemented MVP and accepted follow-ups. The current interaction requirements below supersede the original hover-driven preview proposal. Delivery history is recorded in [the implementation record](implementation.md).
 
 **Version:** 0.1  
-**Status:** Ready for implementation  
+**Status:** MVP implemented; remaining compatibility checks tracked below\
 **Project type:** Self-hosted web application  
 **Initial platform:** Desktop browser (Linux)  
-**Future platforms:** iPad, tablets, smartphones  
+**Responsive validation:** PC, smartphone and iPad accepted by the maintainer\
 **Primary media server:** Plex Media Server (Plex Pass)
 
 ## 1. Product Overview
@@ -27,13 +27,13 @@ The application must:
 
 - Provide a modern, cinematic browsing experience inspired by Netflix.
 - Automatically organize movies into horizontal genre-based carousels.
-- Play trailer previews automatically when users focus on a movie.
+- Play trailer previews automatically in the visible hero and opened movie details, after a short delay.
 - Reuse Plex metadata, artwork, watch history, and available trailers.
 - Support Plex Pass trailer and extras functionality.
 - Run locally without requiring a cloud-hosted application.
 - Avoid modifying the Plex library or watch history.
 - Be simple to install, configure, and maintain.
-- Support desktop browsers initially, with a responsive architecture suitable for future tablet support.
+- Support desktop browsers with responsive layouts for tablets and smartphones.
 
 ### Non-goals
 
@@ -77,11 +77,11 @@ This address must be configurable and must not be hardcoded throughout the appli
 
 The Plex authentication token must be configurable and must never be committed to source control.
 
-For the initial local prototype, the token may be stored in browser session storage. Clearly document the security limitations of this approach.
+Hosted Plex sign-in is the primary connection flow, with manual-token entry as an advanced fallback. Only the verified server token is stored in browser session storage; the account token remains transient. Clearly document the security limitations of browser token storage.
 
 The application must not expose the Plex token to third-party services.
 
-The application should be designed so that a lightweight reverse proxy can be introduced for production deployment if required.
+Local development and production preview use Vite's fixed-origin Plex proxy. Optional Docker packaging serves the SPA through Nginx with the same fixed-origin proxy boundary.
 
 No custom application backend is required for the MVP.
 
@@ -124,6 +124,10 @@ The layout should use dark backgrounds, readable typography, smooth transitions,
 
 Avoid excessive animations or visual clutter.
 
+The featured film is chosen randomly from unwatched films when available, otherwise from watched films. It stays stable during ordinary browsing and filtering. Surprise me intentionally selects another eligible film when possible.
+
+At viewport widths of 540px or less, the hero uses static artwork without a preview. Movie-details previews remain available. Wider viewports, including smartphone landscape, retain hero previews.
+
 ### 4.2 Genre-Based Carousels
 
 Movies must be automatically grouped using their Plex genre metadata.
@@ -153,27 +157,17 @@ The application should support configurable ordering of sections.
 
 Horizontal scrolling should support mouse wheels, trackpads, and navigation buttons.
 
-The architecture should allow touch gestures to be added later.
+Rails support native horizontal touch scrolling. Recently Added contains at most the 25 newest films matching the active filters; its count and details navigation use the same bounded list. Other rails initially render 30 posters and reveal further batches with Show more.
 
 ### 4.3 Movie Selection
 
-When a user focuses on a movie poster:
+Hover reveals poster actions; keyboard focus highlights the selected poster. Neither replaces the featured film nor starts a trailer in a lower rail.
 
-1. Highlight the selected poster.
-2. Display the selected movie's metadata.
-3. Wait approximately 1.5 seconds.
-4. Automatically start its trailer if available.
-5. Start playback muted.
-6. Cancel the pending preview if the user selects another movie.
-7. Stop the previous trailer when selection changes.
+Click, Enter or a touch tap opens the film's details in a modal. Opening from a category captures its currently filtered sequence. Previous/Next buttons, keyboard arrows and horizontal swipes outside the trailer and interactive controls navigate that sequence without wrapping. Closing restores focus and page position.
 
-The preview must not start immediately while users are quickly browsing.
+More info in the hero opens standalone details for that film, without a category counter, previous/next buttons, or keyboard/swipe movie navigation.
 
-Mouse hover may trigger selection on desktop.
-
-Keyboard focus must provide equivalent functionality.
-
-For future touch support, tapping a poster should select the movie rather than immediately navigating away.
+A newly opened details preview or eligible visible hero waits approximately 1.5 seconds before starting cold trailer discovery/playback. Rapid film changes cancel obsolete work. Reusing an eligible retained preview can skip that delay. New preview surfaces start muted; the existing in-memory audio preference is preserved while navigating within the same surface.
 
 ### 4.4 Trailer Preview
 
@@ -202,17 +196,18 @@ A trailer must not be considered available merely because Plex returns metadata.
 
 ### Trailer Playback Requirements
 
-- Autoplay after the selection delay.
+- Autoplay after the preview delay on the accepted hero/details surfaces.
 - Muted by default.
 - Inline playback without fullscreen.
 - No looping unless explicitly enabled.
 - Stop playback when the selected movie changes.
-- Stop playback when the preview is no longer visible.
+- Suspend playback when its surface leaves the viewport or is occluded; changing browser tabs alone preserves playback as specified below.
 - Show a static background when no trailer is available.
 - Handle unsupported codecs and playback errors gracefully.
 - Avoid unnecessary concurrent video requests.
 - Provide an explicit audio toggle.
 - Avoid autoplaying multiple trailers simultaneously.
+- Keep artwork and Finding your preview visible until the browser presents a video frame. Only then report Preview playing and reveal the video with a 600ms fade. Without video-frame callback support, require current decoded video data and nonzero video dimensions before reporting playback. Respect reduced-motion preferences.
 
 Use native HTML5 video playback when possible.
 
@@ -251,7 +246,7 @@ The maintainer found no noticeable improvement from the route-preference experim
 - Returning to an eligible preview starts at zero on its existing open session, without new decision/start/initial segment requests when the required bytes remain buffered. Cold, unverified, ended, oversized or evicted buffers use the normal delayed discovery and fresh approved HLS path. Do not reuse closed session URLs.
 - On reuse failure, dispose the old playback and rebuild through a fresh Plex decision/session. Existing startup/buffering timeouts and candidate fallbacks remain active; no Plex restriction is bypassed.
 - Expiry, eviction, error, refresh/inspection, settings and disconnect release retained sessions with existing scoped best-effort stop calls. Cached media must stay silent and detached from the visible surface. Native HLS buffering remains browser-controlled; hls.js loading is suspended explicitly. Plex may retain a transcoder temporarily until cleanup/expiry.
-- Preserve existing popup/hero audio reset rules and controls. Only real media/playing events establish resolution/playback; retained history must not make a new restart appear successful before it plays.
+- Preserve existing popup/hero audio reset rules and controls. Media loading establishes resolution; a presented frame after playback starts establishes playback success, with the decoded-data fallback above where frame callbacks are unavailable. Retained history must not make a new restart appear successful before it plays.
 
 Acceptance: simulate slow initial segments, play A and B, then deny new media requests. Returning to A and the hero must still play from zero with the same existing element/source and no new HLS startup. Test native HLS and MSE; test 30-second expiry, two-entry eviction, ineligible buffers, teardown, silence and fresh-session fallback after reuse failure. Production Docker must prove the no-rebuild path too. Real Plex latency and session survival remain maintainer acceptance items; a first-start speedup is not claimed.
 
@@ -285,6 +280,8 @@ Selecting a movie should display:
 
 Use a modal or expandable panel rather than requiring full-page navigation.
 
+Category-opened details include bounded navigation through their opening sequence. Hero-opened details show only the selected film, as specified in section 4.3.
+
 ### 4.6 Open in Plex
 
 Provide an "Open in Plex" action.
@@ -295,7 +292,9 @@ Do not construct unverified Plex URLs.
 
 If direct navigation is not reliable, provide a fallback that opens Plex Web and makes the movie title easy to copy.
 
-Direct playback on a Samsung TV is outside MVP scope.
+TV remote control and direct playback on Plex TV clients are excluded from planned scope.
+
+The maintainer confirmed on 2026-11-11 that Open in Plex opens the correct film in Plex Web in their browser. Copy title remains available as a fallback; this confirmation does not establish compatibility with every Plex client or browser version.
 
 ## 5. Browsing and Filtering
 
@@ -315,6 +314,8 @@ Allow combining multiple filters.
 
 For the MVP, all filtering may happen client-side.
 
+On supported desktop browsers, native select menus open after mouse release so the opening click cannot also choose an option. Preserve keyboard and touch behavior, with a native fallback when picker support is missing or denied. Focus outlines use the shared amber styling with a 1px offset to avoid overlapping adjacent controls.
+
 ## 6. Data and Caching
 
 Plex remains the source of truth.
@@ -333,7 +334,7 @@ Lazy-load images outside the viewport.
 
 Avoid loading trailer video streams for every movie in advance.
 
-Only request trailer playback resources when a movie becomes selected.
+In the current implementation, only request trailer playback resources for the eligible hero or opened details preview. Adjacent trailers are not preloaded; a separately approved experiment is recorded in section 11.
 
 Use a small in-memory cache for trailer availability and resolved metadata.
 
@@ -415,6 +416,8 @@ A trailer failure must never block movie selection or browsing.
 
 ## 10. Development Phases
 
+All five phases below are implemented with the accepted interaction changes above. Automated checks use synthetic Plex data and media. Maintainer acceptance confirms real-server browsing/previews, the PC and smartphone layout, and correct Open in Plex navigation. On 2026-11-12 the maintainer also confirmed that iPad works well, with no glitches or other problems to report. The remaining manual checks cover other browser/device configurations, including Firefox, additional provider/codec combinations, session cleanup and browser/OS background scheduling; these are compatibility checks rather than missing core MVP features.
+
 ### Phase 1 — Plex Integration
 
 Implement:
@@ -458,7 +461,7 @@ Implement:
 - Trailer availability caching.
 - Trailer diagnostics.
 
-Create a development-only diagnostic view showing, for a sample of movies:
+Provide a diagnostic view enabled in development and available through explicit production opt-in, showing for a sample of movies:
 
 - Movie title.
 - Plex movie identifier.
@@ -486,7 +489,7 @@ Implement:
 
 **Acceptance criteria:**
 
-Users can move through a movie carousel, pause on a title, and watch its trailer automatically without opening a separate details page.
+Users can browse posters without starting streams, open details to watch a delayed automatic preview, and watch the eligible hero preview without opening details. Switching films cancels obsolete work and never starts multiple active previews.
 
 ### Phase 5 — Polish
 
@@ -503,24 +506,23 @@ Implement:
 
 ## 11. Future Enhancements
 
-Scope decisions confirmed by the maintainer on 2026-11-10:
+Scope decisions confirmed by the maintainer:
 
 - **Pick for me / random movie discovery: accepted as complete.** The hero's Surprise me action and Open in Plex cover this use case. Its current unwatched-first selection from the selected library is accepted; a separate filter-aware picker is no longer required.
 - **Shortlist: removed from planned scope.** Unwatched combined with Recently Added is the accepted candidate view for the evening. No dedicated temporary or shared shortlist is planned.
+- **Custom collections: removed from planned scope.** The maintainer does not require manually curated collections.
+- **TV remote control and direct playback on Plex TV clients: removed from planned scope.** The maintainer does not require either capability.
+- **Progressive Web App installation: removed from planned scope.** The maintainer does not require PWA support.
+- **Personalized recommendations: removed from planned scope.** The maintainer does not require a recommendation system.
 
-These decisions supersede earlier proposals for these two features. The remaining ideas below were outside the original MVP; delivered follow-ups are recorded in [the implementation record](implementation.md):
+These decisions supersede earlier proposals for these features. The remaining ideas below were outside the original MVP; delivered follow-ups are recorded in [the implementation record](implementation.md):
 
-- iPad-optimized touch interactions.
-- Progressive Web App installation.
+- Bounded adjacent-trailer preloading while browsing category details: approved for an experiment in a separate PR, not implemented or enabled in this branch. That PR must define buffering/session budgets and cancellation, measure real Plex startup latency and load, and explicitly revise the current no-preloading requirements.
 - TMDB trailer fallback.
 - YouTube trailer integration.
-- Personalized recommendations.
-- Custom genre collections.
 - Multiple Plex users.
-- TV remote control.
-- Direct playback on Plex TV clients.
 - Optional deployment on the QNAP.
-- Optional Docker packaging.
+- Optional Docker packaging: delivered as a follow-up.
 
 The application architecture should allow these features without requiring a major rewrite.
 
