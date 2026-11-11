@@ -57,7 +57,7 @@ Compose reads `.env` automatically. If you already configured `.env.local` for V
 
 Use your Plex server's LAN IP or a hostname resolvable inside Docker. `localhost` inside the container refers to the container itself. If Plex runs on the Docker host, its LAN address is the simplest option; Docker Desktop also provides `host.docker.internal`. Linux host-gateway mappings or shared Docker networks can be supplied with a local Compose override if needed.
 
-After editing runtime settings, run `docker compose up -d` to recreate the container. For LAN access, open `http://<docker-host-ip>:8080`; use HTTPS through your existing TLS reverse proxy if you require encrypted browser traffic. Preview sessions also work on HTTP LAN origins where `crypto.randomUUID` is unavailable; clipboard access may still require HTTPS or localhost.
+After editing runtime settings, run `docker compose up -d` to recreate the container. For LAN access, open `http://<docker-host-ip>:8080`; use HTTPS through your existing TLS reverse proxy if you require encrypted browser traffic. Preview sessions also work on HTTP LAN origins where `crypto.randomUUID` is unavailable.
 
 ```bash
 docker compose ps          # Container and health status
@@ -139,7 +139,7 @@ Disconnect clears local access and catalog caches; it does not revoke Plex’s A
 - On supported desktop browsers, filter and library select menus open after mouse release to prevent the opening gesture from selecting an option. Keyboard and touch interaction remain native, with a fallback if picker support is unavailable or denied. All focus outlines use a compact 1px offset so they do not overlap adjacent controls.
 - Rails support trackpads, mouse wheels, scroll buttons, and native touch scrolling. Vertical wheel input scrolls the rail while there is room; at the ends it continues down the page. Ctrl-wheel remains available for zoom.
 - Categories remain visible during search and every filter combination, including Unwatched. Empty categories are omitted. Recently Added is limited to the 25 most recent films matching the current filters, including its details navigation. Other rails initially render 30 posters; Show more reveals subsequent batches. Catalog retrieval itself is paginated and loads the complete selected library.
-- Open in Plex uses the server's machine identifier and the movie's metadata key. The details panel also provides Copy title if a particular Plex Web version cannot navigate to the film. With no machine identifier, the link opens Plex Web's home.
+- Open in Plex uses the server's machine identifier and the movie's metadata key. The movie title remains selectable as ordinary text for manual copying if needed. With no machine identifier, the link opens Plex Web's home.
 - At viewport widths of 540px or less, the hero shows static artwork without starting a preview; details can still play trailers. Wider viewports, including smartphone landscape, retain hero previews. The maintainer has accepted the layout on PC, smartphone and iPad.
 
 - **Pick for me** is fulfilled by **Surprise me → Open in Plex** in the hero, using the existing unwatched-first selection from the selected library.

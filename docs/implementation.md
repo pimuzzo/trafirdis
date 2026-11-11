@@ -103,6 +103,8 @@ Hero previews are not mounted at widths of 540px or less; static artwork keeps n
 
 More info in the hero now opens standalone film details without a category counter or movie navigation. Category-opened details retain their captured filtered sequence, buttons, keyboard arrows and touch swipes. Recently Added is capped at the 25 newest films matching the current filters, including its count and details navigation. Other rails retain their existing batches and Show more action.
 
+The dedicated Copy title button and its clipboard state/API calls were removed at the maintainer's request. Movie titles remain selectable for normal browser copying.
+
 Focus outlines use the shared amber styling with a 1px offset. A common native-select component opens desktop pickers after mouse release on supported browsers, preventing the opening gesture from also selecting an option. Keyboard and touch behavior remain native; missing or denied picker support falls back to ordinary browser interaction. The maintainer confirmed the accidental-selection fix in Brave.
 
 Preview playback is reported only after a video-frame callback following playback start, with a decoded-data and nonzero-dimensions fallback where that API is unavailable. Artwork and Finding your preview remain until then; the existing 600ms video fade is preserved and respects reduced motion. Pending frame callbacks are cancelled and invalidated on cleanup, suspension and restart. The first-frame wait remains covered by the startup timeout.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import {
   durationLabel,
   type Movie,
@@ -72,12 +72,9 @@ export function MovieDetails({
   index: number;
   onNavigate?: (index: number) => void;
 }) {
-  const [copiedId, setCopiedId] = useState("");
-  const copied = copiedId === movie.id;
   const content = useRef<HTMLDivElement>(null);
   const touch = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
-    setCopiedId("");
     const dialog = content.current?.closest("dialog");
     if (dialog) {
       dialog.scrollTop = 0;
@@ -212,20 +209,6 @@ export function MovieDetails({
             </div>
             <div className="actions">
               <OpenInPlex movie={movie} server={server} sample={!client} />
-              <button
-                className="button secondary"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(movie.title);
-                    setCopiedId(movie.id);
-                  } catch {
-                    setCopiedId("");
-                  }
-                }}
-              >
-                <Icon name={copied ? "check" : "copy"} size={16} />
-                {copied ? "Title copied" : "Copy title"}
-              </button>
             </div>
             <p className="subtle">
               {!client

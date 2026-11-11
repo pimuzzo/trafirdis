@@ -290,11 +290,11 @@ The initial implementation should attempt to open the corresponding movie in the
 
 Do not construct unverified Plex URLs.
 
-If direct navigation is not reliable, provide a fallback that opens Plex Web and makes the movie title easy to copy.
+If direct navigation is not reliable, provide a fallback that opens Plex Web. Keep the movie title selectable as ordinary text for manual copying; no dedicated copy button is required.
 
 TV remote control and direct playback on Plex TV clients are excluded from planned scope.
 
-The maintainer confirmed on 2026-11-11 that Open in Plex opens the correct film in Plex Web in their browser. Copy title remains available as a fallback; this confirmation does not establish compatibility with every Plex client or browser version.
+The maintainer confirmed on 2026-11-11 that Open in Plex opens the correct film in Plex Web in their browser. The dedicated Copy title action was removed at the maintainer's request; copying uses normal browser text selection. This confirmation does not establish compatibility with every Plex client or browser version.
 
 ## 5. Browsing and Filtering
 
