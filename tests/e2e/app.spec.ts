@@ -382,6 +382,140 @@ test("combines filters without additional Plex requests and supports keyboard na
   ).toContainText("First Light");
   expect(requests.filter((r) => r.path.endsWith("/all"))).toHaveLength(before);
 });
+test("desktop selects open after mouse release without changing values or scroll position", async ({
+  page,
+}) => {
+  await mockPlex(page, {
+    trailer: "missing",
+    libraries: [
+      { key: "1", title: "Movies" },
+      { key: "2", title: "Archive" },
+    ],
+  });
+  await page.addInitScript(() => {
+    const showPicker = HTMLSelectElement.prototype.showPicker;
+    let buttons = 0;
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        buttons = event.buttons;
+      },
+      true,
+    );
+    document.addEventListener(
+      "pointerup",
+      (event) => {
+        buttons = event.buttons;
+      },
+      true,
+    );
+    HTMLSelectElement.prototype.showPicker = function () {
+      this.dataset.pickerButtons = String(buttons);
+      return showPicker.call(this);
+    };
+  });
+  await connect(page);
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  await page.evaluate(() => window.scrollTo(0, 500));
+  for (const label of [
+    "Movie library",
+    "Genre",
+    "Release year",
+    "Watch status",
+    "Runtime",
+    "Rating",
+  ]) {
+    const select = page.getByLabel(label, { exact: true });
+    const value = await select.inputValue();
+    const scroll = await page.evaluate(() => scrollY);
+    const bounds = await select.boundingBox();
+    await page.mouse.move(
+      bounds!.x + bounds!.width / 2,
+      bounds!.y + bounds!.height / 2,
+    );
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    await expect(select).not.toHaveAttribute("data-picker-buttons");
+    await expect(select).toHaveValue(value);
+    await page.mouse.up();
+    await expect(select).toHaveAttribute("data-picker-buttons", "0");
+    await page.keyboard.press("Escape");
+    await expect(select).toHaveValue(value);
+    expect(await page.evaluate(() => scrollY)).toBe(scroll);
+  }
+  const genre = page.getByLabel("Genre", { exact: true });
+  await genre.focus();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(genre).toHaveValue("Adventure");
+  await expect(recentCards(page)).toHaveCount(1);
+});
+
+for (const support of ["missing", "denied"]) {
+  test(`selects keep native interaction when picker support is ${support}`, async ({
+    page,
+  }) => {
+    await page.addInitScript((support) => {
+      if (support === "missing") {
+        Reflect.deleteProperty(HTMLSelectElement.prototype, "showPicker");
+      } else {
+        HTMLSelectElement.prototype.showPicker = () => {
+          throw new DOMException("Picker unavailable", "NotAllowedError");
+        };
+      }
+    }, support);
+    await mockPlex(page, { trailer: "missing" });
+    await connect(page);
+    await page.getByRole("button", { name: "Filters", exact: true }).click();
+    await page.evaluate(() => window.scrollTo(0, 500));
+    const genre = page.getByLabel("Genre", { exact: true });
+    await genre.click();
+    await page.keyboard.press("Escape");
+    await expect(genre).toHaveValue("");
+    await genre.click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(genre).toHaveValue("Adventure");
+  });
+}
+
+test.describe("touch filters", () => {
+  test.use({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  test("touch keeps native select handling without opening the mouse picker", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      HTMLSelectElement.prototype.showPicker = function () {
+        this.dataset.mousePickerOpened = "true";
+      };
+    });
+    await mockPlex(page, { trailer: "missing" });
+    await connect(page);
+    await page.getByRole("button", { name: "Filters", exact: true }).tap();
+    for (const label of [
+      "Genre",
+      "Release year",
+      "Watch status",
+      "Runtime",
+      "Rating",
+    ]) {
+      const select = page.getByLabel(label, { exact: true });
+      await select.tap();
+      await page.keyboard.press("Escape");
+      await expect(select).not.toHaveAttribute("data-mouse-picker-opened");
+      await expect(select).toHaveValue("");
+    }
+    await page.getByLabel("Genre", { exact: true }).selectOption("Drama");
+    await expect(recentCards(page)).toHaveCount(2);
+  });
+});
+
 test("plays a native trailer after the delay, muted and inline, and stops on hiding", async ({
   page,
 }) => {

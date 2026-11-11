@@ -21,6 +21,7 @@ import { TrailerService } from "../trailer/service";
 import { Preview } from "./Preview";
 import { useMovieLibrary } from "../hooks/useMovieLibrary";
 import { useFeaturedMovie } from "../hooks/useFeaturedMovie";
+import { Select } from "./Select";
 const Diagnostics = diagnosticsEnabled
   ? lazy(() => import("./Diagnostics"))
   : null;
@@ -263,7 +264,7 @@ export default function Catalog({
           </div>
           <div className="catalog-tools">
             {!sample && libraries.data && libraries.data.length > 1 && (
-              <select
+              <Select
                 aria-label="Movie library"
                 value={libraryId}
                 onChange={(e) => {
@@ -277,7 +278,7 @@ export default function Catalog({
                     {l.title}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
             <button
               className={`button filter-button ${filterOpen ? "is-active" : ""}`}
