@@ -1315,6 +1315,58 @@ test("details navigation stays in the opening category and restores focus and pa
   expect(await page.evaluate(() => scrollY)).toBe(position);
 });
 
+test("Recently Added caps posters and details navigation at the latest 25 films", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "missing" });
+  await page.route("**/plex/library/sections/1/all?*", (route) =>
+    route.fulfill({
+      json: {
+        MediaContainer: {
+          totalSize: 40,
+          Metadata: Array.from({ length: 40 }, (_, index) => ({
+            ...films[0],
+            ratingKey: String(index + 1),
+            key: `/library/metadata/${index + 1}`,
+            title: `Synthetic film ${index + 1}`,
+            addedAt: index + 1,
+          })),
+        },
+      },
+    }),
+  );
+  await connect(page);
+  const rail = page.getByRole("region", {
+    name: "Recently Added",
+    exact: true,
+  });
+  await expect(rail.locator("[data-movie]")).toHaveCount(25);
+  await expect(rail.getByRole("heading")).toHaveText("Recently Added25");
+  await expect(rail.getByRole("button", { name: "Show more" })).toHaveCount(0);
+  await expect(rail.locator("[data-movie]").first()).toHaveAttribute(
+    "data-movie",
+    "40",
+  );
+  await expect(rail.locator("[data-movie]").last()).toHaveAttribute(
+    "data-movie",
+    "16",
+  );
+  await expect(
+    page
+      .getByRole("region", { name: "Drama", exact: true })
+      .getByRole("button", { name: "Show more" }),
+  ).toBeVisible();
+  await rail.locator("[data-movie]").last().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("status")).toContainText("25 of 25");
+  await expect(
+    dialog.getByRole("button", { name: "Next movie" }),
+  ).toBeDisabled();
+  await expect(
+    dialog.getByRole("heading", { name: "Synthetic film 16", exact: true }),
+  ).toBeVisible();
+});
+
 test("filtered categories define the dialog sequence and a single result disables both directions", async ({
   page,
 }) => {

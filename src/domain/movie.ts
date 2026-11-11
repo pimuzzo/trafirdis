@@ -83,7 +83,7 @@ export function groupMovies(
     },
     {
       title: "Recently Added",
-      movies: [...movies].sort((a, b) => b.addedAt - a.addedAt),
+      movies: [...movies].sort((a, b) => b.addedAt - a.addedAt).slice(0, 25),
     },
     {
       title: "Unwatched Movies",

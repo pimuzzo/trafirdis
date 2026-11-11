@@ -61,6 +61,32 @@ describe("catalog", () => {
       ),
     ).toBe(false);
   });
+  it("limits Recently Added to the latest 25 matching films without limiting other categories", () => {
+    const movies = Array.from({ length: 60 }, (_, index) =>
+      movie({ id: String(index), addedAt: index, watched: index % 2 === 0 }),
+    );
+    for (const filters of [
+      emptyFilters,
+      { ...emptyFilters, watched: "unwatched" },
+    ]) {
+      const matching = filterMovies(movies, filters);
+      const rails = groupMovies(matching);
+      const recent = rails.find((rail) => rail.title === "Recently Added")!;
+      expect(recent.movies).toHaveLength(25);
+      expect(recent.movies.map((movie) => movie.id)).toEqual(
+        matching
+          .slice(-25)
+          .reverse()
+          .map((movie) => movie.id),
+      );
+      expect(rails.find((rail) => rail.title === "Drama")?.movies).toHaveLength(
+        matching.length,
+      );
+    }
+    expect(movies.map((movie) => movie.addedAt)).toEqual(
+      Array.from({ length: 60 }, (_, index) => index),
+    );
+  });
   it("can hide the unwatched section without removing genres", () => {
     const m = movie();
     expect(groupMovies([m]).some((r) => r.title === "Unwatched Movies")).toBe(
