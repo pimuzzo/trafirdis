@@ -1315,6 +1315,99 @@ test("details navigation stays in the opening category and restores focus and pa
   expect(await page.evaluate(() => scrollY)).toBe(position);
 });
 
+for (const width of [1440, 390]) {
+  test(`long movie details stay readable and navigable at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 620 });
+    await mockPlex(page, { trailer: "missing" });
+    const title =
+      "A Very Long Fictional Movie Title Across Many Lines: " +
+      "BeyondTheEdgeOfTheKnownUniverse".repeat(4);
+    const summary =
+      "A fictional traveler explores distant worlds and returns to tell a story about friendship and discovery. ".repeat(
+        25,
+      );
+    await page.route("**/plex/library/sections/1/all?*", (route) =>
+      route.fulfill({
+        json: {
+          MediaContainer: {
+            totalSize: films.length,
+            Metadata: films.map((film, index) =>
+              index === 1 ? { ...film, title, summary } : film,
+            ),
+          },
+        },
+      }),
+    );
+    await connect(page);
+    await recentCards(page).nth(1).click();
+    const dialog = page.getByRole("dialog");
+    const heading = dialog.getByRole("heading", { name: title, exact: true });
+    await expect(heading).toHaveText(title);
+    const synopsis = dialog.locator(".details-summary");
+    await expect(synopsis).toHaveText(summary.trim());
+    await expect
+      .poll(() =>
+        synopsis.evaluate(
+          (element) =>
+            element.clientHeight <=
+            parseFloat(getComputedStyle(element).lineHeight) * 5 + 1,
+        ),
+      )
+      .toBe(true);
+    const more = dialog.getByRole("button", { name: "Read more", exact: true });
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await more.click();
+    await expect(
+      dialog.getByRole("button", { name: "Read less", exact: true }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      await synopsis.evaluate((element) => element.clientHeight),
+    ).toBeGreaterThan(300);
+    await dialog
+      .getByRole("button", { name: "Read less", exact: true })
+      .click();
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await dialog
+      .getByRole("link", { name: "Open in Plex" })
+      .scrollIntoViewIfNeeded();
+    await page.setViewportSize({ width, height: 420 });
+    await dialog.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    const bounds = await dialog.boundingBox();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(420);
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    const close = dialog.getByRole("button", {
+      name: `Close ${title} details`,
+    });
+    const closeBounds = await close.boundingBox();
+    expect(closeBounds!.y).toBeGreaterThanOrEqual(bounds!.y);
+    expect(closeBounds!.y + closeBounds!.height).toBeLessThanOrEqual(
+      bounds!.y + bounds!.height,
+    );
+    await page.screenshot({ path: `work/details-long-${width}.png` });
+    await dialog.getByRole("button", { name: "Next movie" }).click();
+    await expect(
+      dialog.getByRole("heading", { name: "Third Shore", exact: true }),
+    ).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Read more" })).toHaveCount(
+      0,
+    );
+    await dialog.getByRole("button", { name: "Previous movie" }).click();
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await close.click();
+    await expect(dialog).toHaveCount(0);
+    await expect(recentCards(page).nth(1)).toBeFocused();
+  });
+}
+
 test("Recently Added caps posters and details navigation at the latest 25 films", async ({
   page,
 }) => {

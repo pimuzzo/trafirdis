@@ -282,6 +282,8 @@ Use a modal or expandable panel rather than requiring full-page navigation.
 
 Category-opened details include bounded navigation through their opening sequence. Hero-opened details show only the selected film, as specified in section 4.3.
 
+Keep long titles complete and wrap them within the dialog. Show at most five synopsis lines initially, with an accessible Read more / Read less control only when the text exceeds that height. Changing films resets the synopsis to its collapsed state. Dialog height must follow the dynamic viewport, keeping scrolling and sticky navigation/close controls usable on short mobile screens with browser bars.
+
 ### 4.6 Open in Plex
 
 Provide an "Open in Plex" action.

@@ -125,3 +125,9 @@ Automated checks cover the responsive preview breakpoint, standalone/category de
 Custom collections, TV remote control, direct playback on Plex TV clients, Progressive Web App installation and personalized recommendations have been removed from planned scope at the maintainer's request.
 
 The maintainer approved trying bounded adjacent-trailer preloading during category-details browsing in a dedicated PR. No adjacent preload is implemented or enabled here. That work must define buffering/session budgets and cancellation, preserve the active trailer's priority, measure real Plex latency and load, and explicitly update the current no-preloading requirements.
+
+## Long movie details — 2026-11-12
+
+Details retain complete wrapping titles, with responsive mobile typography. Long synopses initially show five lines and expose Read more / Read less only when measured text overflows. The toggle reports its expanded state and controls the synopsis paragraph; switching films resets it. Short synopses need no extra control.
+
+Dialog height uses dynamic viewport units with a viewport-height fallback, allowing for mobile browser bars. Synthetic desktop/mobile checks exercise long titles and synopses, expansion/collapse, navigation reset, short viewport resizing, accessible sticky controls, no horizontal overflow and focus restoration.

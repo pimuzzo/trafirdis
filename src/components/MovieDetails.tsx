@@ -1,4 +1,11 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   durationLabel,
   type Movie,
@@ -10,6 +17,47 @@ import { plexLink } from "../plex/links";
 import { Artwork } from "./Artwork";
 import { Dialog } from "./Dialog";
 import { Icon } from "./Icon";
+
+function MovieSummary({ text }: { text: string }) {
+  const id = useId();
+  const paragraph = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  useLayoutEffect(() => {
+    const element = paragraph.current!;
+    const measure = () => {
+      const lineHeight = Number.parseFloat(
+        getComputedStyle(element).lineHeight,
+      );
+      setOverflowing(element.scrollHeight > lineHeight * 5 + 1);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [text]);
+  return (
+    <div className="details-synopsis">
+      <p
+        id={id}
+        ref={paragraph}
+        className={`details-summary${expanded ? " is-expanded" : ""}`}
+      >
+        {text}
+      </p>
+      {overflowing && (
+        <button
+          className="text-button synopsis-toggle"
+          aria-expanded={expanded}
+          aria-controls={id}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "Read less" : "Read more"}
+        </button>
+      )}
+    </div>
+  );
+}
 export function MovieFacts({ movie }: { movie: Movie }) {
   return (
     <div className="movie-facts">
@@ -199,9 +247,10 @@ export function MovieDetails({
             </span>
             <h2>{movie.title}</h2>
             <MovieFacts movie={movie} />
-            <p className="details-summary">
-              {movie.summary || "No synopsis is available for this movie."}
-            </p>
+            <MovieSummary
+              key={movie.id}
+              text={movie.summary || "No synopsis is available for this movie."}
+            />
             <div className="genre-tags">
               {movie.genres.map((g) => (
                 <span key={g}>{g}</span>

@@ -916,6 +916,7 @@ input::placeholder {
   color: #f1f1f1;
   width: min(900px, calc(100% - 40px));
   max-height: 90vh;
+  max-height: 90dvh;
   box-shadow: 0 40px 120px #000b;
   overflow: auto;
 }
@@ -984,7 +985,20 @@ input::placeholder {
   font-size: 12px;
   line-height: 1.9;
   color: #aeb0b8;
+  margin: 0;
+}
+.details-synopsis {
   margin: 20px 0;
+}
+.details-summary:not(.is-expanded) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+.synopsis-toggle {
+  min-height: 44px;
+  padding: 8px 0;
 }
 .genre-tags {
   display: flex;
@@ -1390,6 +1404,7 @@ input::placeholder {
   .dialog {
     width: calc(100% - 20px);
     max-height: 94vh;
+    max-height: 94dvh;
   }
   .details-visual {
     height: 240px;
@@ -1401,7 +1416,8 @@ input::placeholder {
     margin-top: -50px;
   }
   .details-copy h2 {
-    font-size: 32px;
+    font-size: clamp(26px, 7vw, 32px);
+    line-height: 1.15;
   }
   .settings-body {
     padding: 35px 25px;
