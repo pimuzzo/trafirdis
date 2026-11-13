@@ -6,6 +6,16 @@ const attempt = {
   kind: "direct" as const,
   source: "Plex trailer" as const,
 };
+beforeEach(() => {
+  vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+  vi.spyOn(HTMLMediaElement.prototype, "readyState", "get").mockReturnValue(2);
+  vi.spyOn(HTMLVideoElement.prototype, "videoWidth", "get").mockReturnValue(
+    640,
+  );
+  vi.spyOn(HTMLVideoElement.prototype, "videoHeight", "get").mockReturnValue(
+    360,
+  );
+});
 describe("native video playback", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -63,6 +73,220 @@ describe("native video playback", () => {
     expect(video.hasAttribute("src")).toBe(true);
     video.dispatchEvent(new Event("play"));
     video.dispatchEvent(new Event("playing"));
+    video.dispatchEvent(new Event("ended"));
+    await result;
+  });
+  it("waits for a presented video frame after the playing event", async () => {
+    const video = document.createElement("video");
+    let frame!: VideoFrameRequestCallback;
+    video.requestVideoFrameCallback = vi.fn((callback) => {
+      frame = callback;
+      return 1;
+    });
+    video.cancelVideoFrameCallback = vi.fn();
+    const playing = vi.fn();
+    const result = playAttempt(
+      video,
+      attempt,
+      new PlexClient("x"),
+      new AbortController().signal,
+      vi.fn(),
+      playing,
+    );
+    video.dispatchEvent(new Event("playing"));
+    video.dispatchEvent(new Event("loadeddata"));
+    expect(playing).not.toHaveBeenCalled();
+    frame(0, {} as VideoFrameCallbackMetadata);
+    expect(playing).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(video.hasAttribute("src")).toBe(true);
+    video.dispatchEvent(new Event("ended"));
+    await result;
+  });
+  it("times out a missing first frame and ignores a late frame callback", async () => {
+    const video = document.createElement("video");
+    let frame!: VideoFrameRequestCallback;
+    video.requestVideoFrameCallback = vi.fn((callback) => {
+      frame = callback;
+      return 7;
+    });
+    video.cancelVideoFrameCallback = vi.fn();
+    const playing = vi.fn();
+    const result = playAttempt(
+      video,
+      attempt,
+      new PlexClient("x"),
+      new AbortController().signal,
+      vi.fn(),
+      playing,
+    );
+    const check = expect(result).rejects.toMatchObject({ code: "timeout" });
+    video.dispatchEvent(new Event("playing"));
+    await vi.advanceTimersByTimeAsync(12000);
+    await check;
+    expect(video.cancelVideoFrameCallback).toHaveBeenCalledWith(7);
+    frame(0, {} as VideoFrameCallbackMetadata);
+    expect(playing).not.toHaveBeenCalled();
+    expect(video.hasAttribute("src")).toBe(false);
+  });
+  it("requires decoded video data when frame callbacks are unavailable", async () => {
+    const video = document.createElement("video");
+    Object.defineProperty(video, "requestVideoFrameCallback", {
+      value: undefined,
+    });
+    const ready = vi.spyOn(video, "readyState", "get").mockReturnValue(1);
+    const width = vi.spyOn(video, "videoWidth", "get").mockReturnValue(0);
+    const playing = vi.fn();
+    const result = playAttempt(
+      video,
+      attempt,
+      new PlexClient("x"),
+      new AbortController().signal,
+      vi.fn(),
+      playing,
+    );
+    video.dispatchEvent(new Event("loadeddata"));
+    expect(playing).not.toHaveBeenCalled();
+    video.dispatchEvent(new Event("playing"));
+    expect(playing).not.toHaveBeenCalled();
+    ready.mockReturnValue(2);
+    video.dispatchEvent(new Event("timeupdate"));
+    expect(playing).not.toHaveBeenCalled();
+    width.mockReturnValue(640);
+    video.dispatchEvent(new Event("loadeddata"));
+    expect(playing).toHaveBeenCalledOnce();
+    video.dispatchEvent(new Event("timeupdate"));
+    expect(playing).toHaveBeenCalledOnce();
+    video.dispatchEvent(new Event("ended"));
+    await result;
+  });
+  it.each(["startup", "buffering resume"])(
+    "keeps healthy %s alive while a hidden tab suspends frame presentation",
+    async (mode) => {
+      const video = document.createElement("video");
+      const frames: VideoFrameRequestCallback[] = [];
+      video.requestVideoFrameCallback = vi.fn((callback) =>
+        frames.push(callback),
+      );
+      video.cancelVideoFrameCallback = vi.fn();
+      const hidden = vi.spyOn(document, "hidden", "get");
+      const playing = vi.fn();
+      const client = new PlexClient("x");
+      const controller = new AbortController();
+      const result = playAttempt(
+        video,
+        attempt,
+        client,
+        controller.signal,
+        vi.fn(),
+        playing,
+      );
+      if (mode === "buffering resume") {
+        video.dispatchEvent(new Event("playing"));
+        frames[0](0, {} as VideoFrameCallbackMetadata);
+        video.dispatchEvent(new Event("waiting"));
+      }
+      // The stream starts/resumes before a pending frame can be rendered.
+      video.dispatchEvent(new Event("playing"));
+      hidden.mockReturnValue(true);
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(video.hasAttribute("src")).toBe(true);
+      expect(playing).toHaveBeenCalledTimes(mode === "startup" ? 0 : 1);
+      hidden.mockReturnValue(false);
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(11999);
+      frames.at(-1)!(0, {} as VideoFrameCallbackMetadata);
+      expect(playing).toHaveBeenCalledTimes(mode === "startup" ? 1 : 2);
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(video.hasAttribute("src")).toBe(true);
+      const check = expect(result).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      controller.abort();
+      await check;
+    },
+  );
+  it("restores the frame deadline when a hidden tab becomes visible", async () => {
+    const video = document.createElement("video");
+    video.requestVideoFrameCallback = vi.fn(() => 1);
+    video.cancelVideoFrameCallback = vi.fn();
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    const result = playAttempt(
+      video,
+      attempt,
+      new PlexClient("x"),
+      new AbortController().signal,
+      vi.fn(),
+      vi.fn(),
+    );
+    video.dispatchEvent(new Event("playing"));
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(video.hasAttribute("src")).toBe(true);
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event("visibilitychange"));
+    const check = expect(result).rejects.toMatchObject({ code: "timeout" });
+    await vi.advanceTimersByTimeAsync(12000);
+    await check;
+  });
+  it("still times out a real media stall in a hidden tab", async () => {
+    const video = document.createElement("video");
+    let frame!: VideoFrameRequestCallback;
+    video.requestVideoFrameCallback = vi.fn((callback) => {
+      frame = callback;
+      return 1;
+    });
+    video.cancelVideoFrameCallback = vi.fn();
+    vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    const playing = vi.fn();
+    const result = playAttempt(
+      video,
+      attempt,
+      new PlexClient("x"),
+      new AbortController().signal,
+      vi.fn(),
+      playing,
+    );
+    video.dispatchEvent(new Event("playing"));
+    video.dispatchEvent(new Event("waiting"));
+    frame(0, {} as VideoFrameCallbackMetadata);
+    expect(playing).not.toHaveBeenCalled();
+    const check = expect(result).rejects.toMatchObject({ code: "timeout" });
+    await vi.advanceTimersByTimeAsync(12000);
+    await check;
+    expect(video.hasAttribute("src")).toBe(false);
+  });
+  it("requires a fresh presented frame after suspending and restarting", async () => {
+    const video = document.createElement("video");
+    const frames: VideoFrameRequestCallback[] = [];
+    video.requestVideoFrameCallback = vi.fn((callback) =>
+      frames.push(callback),
+    );
+    video.cancelVideoFrameCallback = vi.fn();
+    let control!: import("../src/trailer/player").PlaybackControl;
+    const playing = vi.fn();
+    const result = playAttempt(
+      video,
+      attempt,
+      new PlexClient("x"),
+      new AbortController().signal,
+      vi.fn(),
+      playing,
+      vi.fn(),
+      (value) => {
+        control = value;
+      },
+    );
+    video.dispatchEvent(new Event("playing"));
+    control.suspend();
+    frames[0](0, {} as VideoFrameCallbackMetadata);
+    expect(playing).not.toHaveBeenCalled();
+    control.restart();
+    video.dispatchEvent(new Event("playing"));
+    frames[0](0, {} as VideoFrameCallbackMetadata);
+    expect(playing).not.toHaveBeenCalled();
+    frames[1](0, {} as VideoFrameCallbackMetadata);
+    expect(playing).toHaveBeenCalledOnce();
     video.dispatchEvent(new Event("ended"));
     await result;
   });

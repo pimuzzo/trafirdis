@@ -56,9 +56,11 @@ a {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+.search-field:focus-within,
+.manual-login summary:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 5px;
+  outline-offset: 1px;
 }
 button {
   border: 0;
@@ -428,10 +430,6 @@ input::placeholder {
   padding-left: 6px;
   border-radius: 5px;
 }
-.search-field:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
 .search input:focus-visible {
   outline: none;
 }
@@ -758,7 +756,6 @@ input::placeholder {
   scroll-snap-align: start;
   border-radius: 5px;
   color: #d9d9dd;
-  outline-offset: 4px !important;
 }
 .poster-wrap {
   aspect-ratio: 2/3;
@@ -778,6 +775,9 @@ input::placeholder {
 .movie-card:hover .poster-wrap {
   transform: translateY(-3px);
   border-color: #e9b87899;
+}
+.artwork.is-loading {
+  opacity: 0;
 }
 .artwork-poster {
   object-fit: cover;
@@ -919,6 +919,7 @@ input::placeholder {
   color: #f1f1f1;
   width: min(900px, calc(100% - 40px));
   max-height: 90vh;
+  max-height: 90dvh;
   box-shadow: 0 40px 120px #000b;
   overflow: auto;
 }
@@ -987,7 +988,20 @@ input::placeholder {
   font-size: 12px;
   line-height: 1.9;
   color: #aeb0b8;
+  margin: 0;
+}
+.details-synopsis {
   margin: 20px 0;
+}
+.details-summary:not(.is-expanded) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+.synopsis-toggle {
+  min-height: 44px;
+  padding: 8px 0;
 }
 .genre-tags {
   display: flex;
@@ -1393,6 +1407,7 @@ input::placeholder {
   .dialog {
     width: calc(100% - 20px);
     max-height: 94vh;
+    max-height: 94dvh;
   }
   .details-visual {
     height: 240px;
@@ -1404,7 +1419,8 @@ input::placeholder {
     margin-top: -50px;
   }
   .details-copy h2 {
-    font-size: 32px;
+    font-size: clamp(26px, 7vw, 32px);
+    line-height: 1.15;
   }
   .settings-body {
     padding: 35px 25px;
@@ -1573,10 +1589,6 @@ input::placeholder {
   color: #f0f1f4;
   font: inherit;
 }
-.diagnostics-search input:focus-visible {
-  outline: 2px solid #d3ac68;
-  outline-offset: 2px;
-}
 .diagnostics-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1731,10 +1743,6 @@ td {
   padding: 12px;
   border-radius: 6px;
   margin: 16px 0;
-}
-.manual-login summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 5px;
 }
 
 .privacy-note a,

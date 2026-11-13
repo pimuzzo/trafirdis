@@ -2,6 +2,8 @@
 
 The repository was inspected first and contained only Git metadata. The entire supplied PRD was read before implementation. Each phase ended with a working TypeScript/Vite application; the final implementation includes all five phases.
 
+The phase table records initial delivery. Current maintainer acceptance and remaining compatibility checks are recorded at the end of this document; earlier validation boundaries are not claims that subsequently confirmed features remain unverified.
+
 | Phase                  | Delivered                                                                                                                                                                         | Validation boundary                                                                                                                                                |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 1 — Plex integration   | React/TypeScript/Vite setup, configurable loopback proxy, token session, isolated JSON adapter, movie-library discovery, pagination, normalized metadata and sized artwork        | Production build and initial catalog tests passed. Real PMS unavailable in this environment.                                                                       |
@@ -20,7 +22,7 @@ The repository was inspected first and contained only Git metadata. The entire s
 
 ## Docker follow-up
 
-Added after the original MVP at the user's request: a multi-stage Dockerfile and Docker Compose service, static hosting plus a fixed-origin Nginx proxy, runtime Plex origin configuration, loopback-only publishing by default, non-root/read-only operation, and container/browser integration tests. No application backend or database was introduced. Docker request logging is disabled to prevent native media query tokens from appearing in logs. Session generation supports HTTP LAN browsers as well as secure origins. The real Plex server remains unvalidated; Docker tests use a synthetic local Plex fixture.
+Added after the original MVP at the user's request: a multi-stage Dockerfile and Docker Compose service, static hosting plus a fixed-origin Nginx proxy, runtime Plex origin configuration, loopback-only publishing by default, non-root/read-only operation, and container/browser integration tests. No application backend or database was introduced. Docker request logging is disabled to prevent native media query tokens from appearing in logs. Session generation supports HTTP LAN browsers as well as secure origins. Real Plex validation was unavailable at initial Docker delivery; subsequent maintainer confirmations are recorded below. Docker tests use a synthetic local Plex fixture.
 
 ## Plex sign-in follow-up
 
@@ -32,7 +34,7 @@ After the MVP merge, added runtime opt-in diagnostics for Docker and production 
 
 Diagnostics can search the loaded library, inspect at most eight fresh metadata records sequentially, cancel pending work, and test a title outside catalog filters. Missing metadata, request failures, unavailable resources, autoplay denial and playback failures remain distinct. Rechecks and new preview attempts clear stale success; pausing preserves genuine observations. Downloaded reports use an explicit allowlist of numeric IDs, states and fixed error codes, excluding titles, credentials, addresses and raw error text. No additional provider, database, dependency or server write was introduced.
 
-The maintainer has confirmed browsing and previews on the real server with Chrome/Docker. Automated tests continue to use synthetic local Plex responses; full provider/codec, session-cleanup and deep-link acceptance remains pending. GitHub Actions runs the expanded unit, browser and Docker suites for this follow-up.
+The maintainer has confirmed browsing and previews on the real server with Chrome/Docker. Automated tests continue to use synthetic local Plex responses; additional provider/codec and session-cleanup checks remain pending. Correct Open in Plex navigation was subsequently confirmed as recorded below. GitHub Actions runs the expanded unit, browser and Docker suites for this follow-up.
 
 ## Category navigation follow-up
 
@@ -81,7 +83,7 @@ Play is disabled during loading and when Plex has no playable trailer resource. 
 
 The existing PRD now defines restart reliability for hero and details previews. HLS playback requests a fresh, validated PMS decision before loading any manifest, with the same extra, settings and session/client identity as start. Decision approval alone never marks a URL resolved or playback verified. Denied/unknown responses cannot start a stream, authentication failures stop candidate fallback, and cancellation/timeout prevents late approvals from attaching stale sources. Existing metadata caching, native parts, audio preferences and scoped cleanup remain in place.
 
-Unit tests cover decision validation, credential handling, cancellation and startup timeout. Browser and production Docker fixtures reject starts without matching decisions and exercise repeated popup reopen and hero scroll-away/return using synthetic media. Real PMS restart acceptance remains pending; private diagnostic logs are not repository assets.
+Unit tests cover decision validation, credential handling, cancellation and startup timeout. Browser and production Docker fixtures reject starts without matching decisions and exercise repeated popup reopen and hero scroll-away/return using synthetic media. The maintainer subsequently confirmed the decision fix on Chrome/Docker, as recorded in the retained-buffer follow-up below; private diagnostic logs are not repository assets.
 
 ## Retained preview buffers experiment
 
@@ -94,3 +96,52 @@ Browser tests prove no new media requests are necessary for a warm return with d
 ## Browser-tab playback continuity
 
 Within the retained-preview PR, removed the document-visibility gate from both preview surfaces at the maintainer's request. Changing browser tabs no longer pauses/mutes the video, clears retained buffers or rebuilds its session; viewport scrolling, manual pause and settings/disconnect still apply. Inactive retention also checks an elapsed-time deadline when accessed, covering throttled background timers. Headless visibility-event tests verify ongoing real synthetic HLS playback and unchanged position/source/audio; actual desktop/OS background media scheduling remains to be checked manually.
+
+## Responsive catalog and preview readiness — 2026-11-11
+
+Hero previews are not mounted at widths of 540px or less; static artwork keeps narrow layouts usable. Details previews remain available, and wider viewports, including smartphone landscape, retain hero playback. Diagnostics Test preview opens standalone details on narrow screens instead of targeting the disabled hero preview.
+
+More info in the hero now opens standalone film details without a category counter or movie navigation. Category-opened details retain their captured filtered sequence, buttons, keyboard arrows and touch swipes. Recently Added is capped at the 25 newest films matching the current filters, including its count and details navigation. Other rails retain their existing batches and Show more action.
+
+The dedicated Copy title button and its clipboard state/API calls were removed at the maintainer's request. Movie titles remain selectable for normal browser copying.
+
+Focus outlines use the shared amber styling with a 1px offset. A common native-select component opens desktop pickers after mouse release on supported browsers, preventing the opening gesture from also selecting an option. Keyboard and touch behavior remain native; missing or denied picker support falls back to ordinary browser interaction. The maintainer confirmed the accidental-selection fix in Brave.
+
+Preview playback is reported only after a video-frame callback following playback start, with a decoded-data and nonzero-dimensions fallback where that API is unavailable. Artwork and Finding your preview remain until then; the existing 600ms video fade is preserved and respects reduced motion. Pending frame callbacks are cancelled and invalidated on cleanup, suspension and restart. The first-frame wait remains covered by the startup timeout.
+
+Automated checks cover the responsive preview breakpoint, standalone/category details, all select controls, keyboard/touch/fallback interaction, delayed frame confirmation, stale callbacks, retained HLS restarts, and Recently Added limits under filters. Browser and Docker fixtures contain only synthetic data/media. `.idea/` workspace files are ignored.
+
+## Current maintainer acceptance — 2026-11-12
+
+- Real Plex browsing and trailer playback were confirmed on the Chrome/Docker deployment; the decision fix and retained-buffer behavior were also accepted in earlier follow-ups.
+- Open in Plex opens the correct film in Plex Web in the maintainer's tested browser.
+- The layout looks good on PC and smartphone. This is visual acceptance, not a complete mobile codec, autoplay or browser compatibility matrix.
+- On 2026-11-12 the maintainer confirmed that iPad works well, with no glitches or other problems to report. iPad acceptance is complete for the tested setup.
+- Other browser/device configurations, including Firefox and other Safari setups, additional provider/codec combinations, session cleanup and browser/OS background scheduling still need targeted manual checks.
+- Automated hosted sign-in tests simulate Plex responses; broader real account/server compatibility remains a separate acceptance item.
+
+## Next separate experiment
+
+Custom collections, TV remote control, direct playback on Plex TV clients, Progressive Web App installation and personalized recommendations have been removed from planned scope at the maintainer's request.
+
+The maintainer approved trying bounded adjacent-trailer preloading during category-details browsing in a dedicated PR. No adjacent preload is implemented or enabled here. That work must define buffering/session budgets and cancellation, preserve the active trailer's priority, measure real Plex latency and load, and explicitly update the current no-preloading requirements.
+
+## Long movie details — 2026-11-12
+
+Details retain complete wrapping titles, with responsive mobile typography. Long synopses initially show five lines and expose Read more / Read less only when measured text overflows. The toggle reports its expanded state and controls the synopsis paragraph; switching films resets it. Short synopses need no extra control.
+
+Dialog height uses dynamic viewport units with a viewport-height fallback, allowing for mobile browser bars. Synthetic desktop/mobile checks exercise long titles and synopses, expansion/collapse, navigation reset, short viewport resizing, accessible sticky controls, no horizontal overflow and focus restoration.
+
+## Catalog view preference — 2026-11-13
+
+Discover/Unwatched is restored on refresh from the browser-wide `trafirdis.catalog-view` local-storage entry. It stores only `discover` or `unwatched`, derived from the existing watch-status filter. Search and other filters remain transient; actions that already clear all filters also return the remembered view to Discover. The existing server-scoped library preference is unchanged. Invalid or missing view preferences use Discover, and blocked storage preserves in-memory switching. No credentials or movie data are added to persistent storage. The preference survives disconnect; clearing site data removes it.
+
+Unit checks cover restoration, transient filter reset, invalid values and blocked storage. Browser checks verify that both library and view survive reload, the correct watched films/categories are shown, and selecting Discover persists the return to the full catalog.
+
+## Hidden-frame readiness and CI reports — 2026-11-13
+
+The first-frame watchdog now distinguishes healthy playback awaiting presentation from a real media stall. After a playing event, a hidden document can defer its frame callback without timing out or releasing the stream. Visibility return restores the presentation deadline if the frame is still missing. Waiting/network stalls keep their timeout in either visibility state. Frame-confirmed display, audio, session identity and cleanup behavior are preserved.
+
+Unit tests cover startup and buffering resume with withheld frames, restoring the visible deadline and a real stall while hidden. Browser tests combine a simulated hidden state with deliberately delayed frame callbacks while real synthetic video continues past 12 seconds, then restore frame delivery without another stream request. This reproduces the missing-frame condition; it does not claim to validate native browser/OS tab suspension.
+
+GitHub browser jobs upload reports only on failure, and upload itself is best effort. This addresses artifact-quota failures after otherwise passing tests while keeping test failures blocking and retaining logs in Actions.

@@ -4,6 +4,7 @@ import {
   type Filters as FilterValues,
   type Movie,
 } from "../domain/movie";
+import { Select } from "./Select";
 export function Filters({
   movies,
   value,
@@ -19,7 +20,7 @@ export function Filters({
     <div className="filter-panel">
       <label>
         Genre
-        <select
+        <Select
           aria-label="Genre"
           value={value.genre}
           onChange={(e) => field("genre", e.target.value)}
@@ -28,11 +29,11 @@ export function Filters({
           {genresOf(movies).map((g) => (
             <option key={g}>{g}</option>
           ))}
-        </select>
+        </Select>
       </label>
       <label>
         Release year
-        <select
+        <Select
           aria-label="Release year"
           value={value.year}
           onChange={(e) => field("year", e.target.value)}
@@ -43,11 +44,11 @@ export function Filters({
             .map((y) => (
               <option key={y}>{y}</option>
             ))}
-        </select>
+        </Select>
       </label>
       <label>
         Watch status
-        <select
+        <Select
           aria-label="Watch status"
           value={value.watched}
           onChange={(e) => field("watched", e.target.value)}
@@ -55,11 +56,11 @@ export function Filters({
           <option value="">Any status</option>
           <option value="unwatched">Unwatched</option>
           <option value="watched">Watched</option>
-        </select>
+        </Select>
       </label>
       <label>
         Runtime
-        <select
+        <Select
           aria-label="Runtime"
           value={value.duration}
           onChange={(e) => field("duration", e.target.value)}
@@ -68,11 +69,11 @@ export function Filters({
           <option value="short">Under 90 minutes</option>
           <option value="medium">90–120 minutes</option>
           <option value="long">Over 120 minutes</option>
-        </select>
+        </Select>
       </label>
       <label>
         Rating
-        <select
+        <Select
           aria-label="Rating"
           value={value.rating}
           onChange={(e) => field("rating", e.target.value)}
@@ -82,7 +83,7 @@ export function Filters({
           <option value="7">7+ / 10</option>
           <option value="8">8+ / 10</option>
           <option value="9">9+ / 10</option>
-        </select>
+        </Select>
       </label>
       <button className="text-button" onClick={() => onChange(emptyFilters)}>
         Clear filters

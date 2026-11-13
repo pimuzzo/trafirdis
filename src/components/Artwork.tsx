@@ -27,15 +27,40 @@ export function Artwork({
   eager?: boolean;
 }) {
   const url = artworkUrl(movie, client, kind);
-  const [failed, setFailed] = useState<string>();
-  return url && failed !== url ? (
+  return (
+    <ArtworkImage
+      key={`${movie.id}:${kind}:${url}`}
+      movie={movie}
+      kind={kind}
+      eager={eager}
+      url={url}
+    />
+  );
+}
+function ArtworkImage({
+  movie,
+  kind,
+  eager,
+  url,
+}: {
+  movie: Movie;
+  kind: "poster" | "art";
+  eager: boolean;
+  url: string | undefined;
+}) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "failed">(
+    "loading",
+  );
+  return url && status !== "failed" ? (
     <img
-      className={`artwork artwork-${kind}`}
+      className={`artwork artwork-${kind}${status === "loading" ? " is-loading" : ""}`}
       src={url}
       alt={kind === "poster" ? `${movie.title} poster` : ""}
       loading={eager ? "eager" : "lazy"}
       decoding="async"
-      onError={() => setFailed(url)}
+      aria-busy={status === "loading"}
+      onLoad={() => setStatus("loaded")}
+      onError={() => setStatus("failed")}
       referrerPolicy="no-referrer"
     />
   ) : (

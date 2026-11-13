@@ -1,5 +1,5 @@
 import { diagnosticsEnabled, serverLabel } from "../config";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PlexClient, errorMessage } from "../plex/client";
 import {
@@ -20,10 +20,29 @@ import { Hero } from "./Hero";
 import { TrailerService } from "../trailer/service";
 import { Preview } from "./Preview";
 import { useMovieLibrary } from "../hooks/useMovieLibrary";
+import { useCatalogFilters } from "../hooks/useCatalogFilters";
 import { useFeaturedMovie } from "../hooks/useFeaturedMovie";
+import { Select } from "./Select";
 const Diagnostics = diagnosticsEnabled
   ? lazy(() => import("./Diagnostics"))
   : null;
+function useIsPhone() {
+  const query = useRef(
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 540px)")
+      : null,
+  );
+  const [small, setSmall] = useState(() => query.current?.matches ?? false);
+  useEffect(() => {
+    const mq = query.current;
+    if (!mq) return;
+    const handler = (e: MediaQueryListEvent) => setSmall(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return small;
+}
+
 export default function Catalog({
   client,
   onDisconnect,
@@ -32,6 +51,7 @@ export default function Catalog({
   onDisconnect: () => void;
 }) {
   const sample = !client;
+  const isPhone = useIsPhone();
   const trailers = useMemo(
     () => (client ? new TrailerService(client) : null),
     [client],
@@ -55,12 +75,14 @@ export default function Catalog({
     document.addEventListener("keydown", shortcut);
     return () => document.removeEventListener("keydown", shortcut);
   }, []);
-  const [filters, setFilters] = useState(emptyFilters);
+  const [filters, setFilters] = useCatalogFilters();
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState("");
-  const [details, setDetails] = useState<{ rail: Rail; index: number } | null>(
-    null,
-  );
+  const [details, setDetails] = useState<{
+    rail: Rail;
+    index: number;
+    categoryNavigation: boolean;
+  } | null>(null);
   const [settings, setSettings] = useState(false);
   const server = useQuery({
     queryKey: ["server"],
@@ -125,11 +147,12 @@ export default function Catalog({
   const select = (movie: Movie) => {
     setSelected(movie.id);
   };
-  const showDetails = (movie: Movie, rail: Rail) => {
+  const showDetails = (movie: Movie, category?: Rail) => {
+    const rail = category ?? { title: "Movie library", movies: [movie] };
     const index = rail.movies.findIndex((item) => item.id === movie.id);
     if (index < 0) return;
     setSelected(movie.id);
-    setDetails({ rail, index });
+    setDetails({ rail, index, categoryNavigation: Boolean(category) });
   };
   const refresh = () => {
     trailers?.clear();
@@ -222,11 +245,9 @@ export default function Catalog({
           connectedServer={connectedServer}
           onRandomize={featuredState.randomizeFeatured}
           canRandomize={featuredState.canRandomize}
-          previewVisible={!details}
+          previewVisible={!details && !isPhone}
           previewEnabled={!settings && !diagnostics}
-          onDetails={(movie) =>
-            showDetails(movie, { title: "Movie library", movies })
-          }
+          onDetails={(movie) => showDetails(movie)}
         />
       )}
       <main id="catalog" className="catalog" tabIndex={-1}>
@@ -244,7 +265,7 @@ export default function Catalog({
           </div>
           <div className="catalog-tools">
             {!sample && libraries.data && libraries.data.length > 1 && (
-              <select
+              <Select
                 aria-label="Movie library"
                 value={libraryId}
                 onChange={(e) => {
@@ -258,7 +279,7 @@ export default function Catalog({
                     {l.title}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
             <button
               className={`button filter-button ${filterOpen ? "is-active" : ""}`}
@@ -376,12 +397,16 @@ export default function Catalog({
           movie={details.rail.movies[details.index]}
           rail={details.rail}
           index={details.index}
-          onNavigate={(index) => {
-            if (index >= 0 && index < details.rail.movies.length) {
-              setSelected(details.rail.movies[index].id);
-              setDetails({ ...details, index });
-            }
-          }}
+          onNavigate={
+            details.categoryNavigation
+              ? (index) => {
+                  if (index >= 0 && index < details.rail.movies.length) {
+                    setSelected(details.rail.movies[index].id);
+                    setDetails({ ...details, index });
+                  }
+                }
+              : undefined
+          }
           client={client}
           server={connectedServer}
           onClose={() => setDetails(null)}
@@ -409,7 +434,11 @@ export default function Catalog({
               setFilters(emptyFilters);
               selectFeatured(movie.id);
               setSelected(movie.id);
-              setDetails(null);
+              if (isPhone) {
+                showDetails(movie);
+              } else {
+                setDetails(null);
+              }
               setDiagnostics(false);
               window.scrollTo({ top: 0, behavior: "instant" });
             }}

@@ -347,6 +347,52 @@ test("welcome and sample catalog are polished, usable, and entirely local", asyn
   expect(errors).toEqual([]);
   expect(external).toEqual([]);
 });
+test("refresh restores the library and Discover or Unwatched without restoring other filters", async ({
+  page,
+}) => {
+  await mockPlex(page, {
+    trailer: "missing",
+    libraries: [
+      { key: "1", title: "Movies" },
+      { key: "2", title: "Archive" },
+    ],
+  });
+  await connect(page);
+  await page.getByLabel("Movie library", { exact: true }).selectOption("2");
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await nav.getByRole("button", { name: "Unwatched", exact: true }).click();
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await page.getByLabel("Genre", { exact: true }).selectOption("Drama");
+  await page.getByLabel("Search movies").fill("First Light");
+  await expect(recentCards(page)).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByLabel("Movie library", { exact: true })).toHaveValue(
+    "2",
+  );
+  await expect(
+    nav.getByRole("button", { name: "Unwatched", exact: true }),
+  ).toHaveClass(/active/);
+  await expect(recentCards(page)).toHaveCount(2);
+  await expect(
+    page.getByRole("region", { name: "Unwatched Movies", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Search movies")).toHaveValue("");
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await expect(page.getByLabel("Genre", { exact: true })).toHaveValue("");
+  await nav.getByRole("button", { name: "Discover", exact: true }).click();
+  await page.reload();
+  await expect(
+    nav.getByRole("button", { name: "Discover", exact: true }),
+  ).toHaveClass(/active/);
+  await expect(recentCards(page)).toHaveCount(3);
+  await expect(
+    page.getByRole("region", { name: "Unwatched Movies", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => localStorage.getItem("trafirdis.catalog-view")),
+  ).toBe("discover");
+});
+
 test("combines filters without additional Plex requests and supports keyboard navigation", async ({
   page,
 }) => {
@@ -382,6 +428,140 @@ test("combines filters without additional Plex requests and supports keyboard na
   ).toContainText("First Light");
   expect(requests.filter((r) => r.path.endsWith("/all"))).toHaveLength(before);
 });
+test("desktop selects open after mouse release without changing values or scroll position", async ({
+  page,
+}) => {
+  await mockPlex(page, {
+    trailer: "missing",
+    libraries: [
+      { key: "1", title: "Movies" },
+      { key: "2", title: "Archive" },
+    ],
+  });
+  await page.addInitScript(() => {
+    const showPicker = HTMLSelectElement.prototype.showPicker;
+    let buttons = 0;
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        buttons = event.buttons;
+      },
+      true,
+    );
+    document.addEventListener(
+      "pointerup",
+      (event) => {
+        buttons = event.buttons;
+      },
+      true,
+    );
+    HTMLSelectElement.prototype.showPicker = function () {
+      this.dataset.pickerButtons = String(buttons);
+      return showPicker.call(this);
+    };
+  });
+  await connect(page);
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  await page.evaluate(() => window.scrollTo(0, 500));
+  for (const label of [
+    "Movie library",
+    "Genre",
+    "Release year",
+    "Watch status",
+    "Runtime",
+    "Rating",
+  ]) {
+    const select = page.getByLabel(label, { exact: true });
+    const value = await select.inputValue();
+    const scroll = await page.evaluate(() => scrollY);
+    const bounds = await select.boundingBox();
+    await page.mouse.move(
+      bounds!.x + bounds!.width / 2,
+      bounds!.y + bounds!.height / 2,
+    );
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    await expect(select).not.toHaveAttribute("data-picker-buttons");
+    await expect(select).toHaveValue(value);
+    await page.mouse.up();
+    await expect(select).toHaveAttribute("data-picker-buttons", "0");
+    await page.keyboard.press("Escape");
+    await expect(select).toHaveValue(value);
+    expect(await page.evaluate(() => scrollY)).toBe(scroll);
+  }
+  const genre = page.getByLabel("Genre", { exact: true });
+  await genre.focus();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(genre).toHaveValue("Adventure");
+  await expect(recentCards(page)).toHaveCount(1);
+});
+
+for (const support of ["missing", "denied"]) {
+  test(`selects keep native interaction when picker support is ${support}`, async ({
+    page,
+  }) => {
+    await page.addInitScript((support) => {
+      if (support === "missing") {
+        Reflect.deleteProperty(HTMLSelectElement.prototype, "showPicker");
+      } else {
+        HTMLSelectElement.prototype.showPicker = () => {
+          throw new DOMException("Picker unavailable", "NotAllowedError");
+        };
+      }
+    }, support);
+    await mockPlex(page, { trailer: "missing" });
+    await connect(page);
+    await page.getByRole("button", { name: "Filters", exact: true }).click();
+    await page.evaluate(() => window.scrollTo(0, 500));
+    const genre = page.getByLabel("Genre", { exact: true });
+    await genre.click();
+    await page.keyboard.press("Escape");
+    await expect(genre).toHaveValue("");
+    await genre.click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(genre).toHaveValue("Adventure");
+  });
+}
+
+test.describe("touch filters", () => {
+  test.use({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  test("touch keeps native select handling without opening the mouse picker", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      HTMLSelectElement.prototype.showPicker = function () {
+        this.dataset.mousePickerOpened = "true";
+      };
+    });
+    await mockPlex(page, { trailer: "missing" });
+    await connect(page);
+    await page.getByRole("button", { name: "Filters", exact: true }).tap();
+    for (const label of [
+      "Genre",
+      "Release year",
+      "Watch status",
+      "Runtime",
+      "Rating",
+    ]) {
+      const select = page.getByLabel(label, { exact: true });
+      await select.tap();
+      await page.keyboard.press("Escape");
+      await expect(select).not.toHaveAttribute("data-mouse-picker-opened");
+      await expect(select).toHaveValue("");
+    }
+    await page.getByLabel("Genre", { exact: true }).selectOption("Drama");
+    await expect(recentCards(page)).toHaveCount(2);
+  });
+});
+
 test("plays a native trailer after the delay, muted and inline, and stops on hiding", async ({
   page,
 }) => {
@@ -512,6 +692,139 @@ test("plays Plex HLS through the lazy fallback in Chromium", async ({
     .toBe(true);
 });
 for (const surface of ["hero", "details"] as const) {
+  test(`${surface} keeps media alive while hidden-frame callbacks are delayed`, async ({
+    page,
+  }) => {
+    test.setTimeout(45000);
+    await page.addInitScript(() => {
+      let hidden = true;
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => hidden,
+      });
+      const requestFrame = HTMLVideoElement.prototype.requestVideoFrameCallback;
+      const cancelFrame = HTMLVideoElement.prototype.cancelVideoFrameCallback;
+      const pending = new Map<number, () => void>();
+      HTMLVideoElement.prototype.requestVideoFrameCallback = function (
+        callback,
+      ) {
+        const id = requestFrame.call(this, (now, metadata) => {
+          this.dataset.framePending = "true";
+          if (hidden) pending.set(id, () => callback(now, metadata));
+          else callback(now, metadata);
+        });
+        return id;
+      };
+      HTMLVideoElement.prototype.cancelVideoFrameCallback = function (id) {
+        pending.delete(id);
+        cancelFrame.call(this, id);
+      };
+      // Loop only the synthetic clip so it outlasts the startup deadline.
+      document.addEventListener(
+        "loadedmetadata",
+        (event) => {
+          if (event.target instanceof HTMLVideoElement)
+            event.target.loop = true;
+        },
+        true,
+      );
+      document.addEventListener("test:restore-presentation", () => {
+        hidden = false;
+        document.dispatchEvent(new Event("visibilitychange"));
+        for (const callback of pending.values()) callback();
+        pending.clear();
+      });
+    });
+    const requests = await mockPlex(page, { trailer: "direct" });
+    await connect(page);
+    if (surface === "details") await recentCards(page).nth(1).click();
+    const host = page.locator(surface === "hero" ? ".hero" : ".details-dialog");
+    const video = host.locator("video");
+    await expect(video).toHaveAttribute("data-frame-pending", "true");
+    const source = await video.getAttribute("src");
+    await page.waitForTimeout(13000);
+    await expect(video).toHaveAttribute("src", source!);
+    await expect(host.locator("[data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "resolved",
+    );
+    expect(
+      await video.evaluate(
+        (element) => !element.paused && element.currentTime > 0,
+      ),
+    ).toBe(true);
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event("test:restore-presentation")),
+    );
+    await expect(host.locator("[data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "playing",
+    );
+    await expect(video).toHaveAttribute("src", source!);
+    const id = surface === "hero" ? "1" : "2";
+    expect(
+      requests.filter((request) =>
+        request.path.startsWith(`/library/parts/${id}/`),
+      ),
+    ).toHaveLength(1);
+  });
+
+  test(`${surface} keeps artwork and loading status until a video frame is presented`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const requestFrame = HTMLVideoElement.prototype.requestVideoFrameCallback;
+      const cancelFrame = HTMLVideoElement.prototype.cancelVideoFrameCallback;
+      const pending = new Map<number, () => void>();
+      let released = false;
+      HTMLVideoElement.prototype.requestVideoFrameCallback = function (
+        callback,
+      ) {
+        const video = this;
+        const id = requestFrame.call(video, (now, metadata) => {
+          video.dataset.frameReady = "true";
+          if (released) callback(now, metadata);
+          else pending.set(id, () => callback(now, metadata));
+        });
+        return id;
+      };
+      HTMLVideoElement.prototype.cancelVideoFrameCallback = function (id) {
+        pending.delete(id);
+        cancelFrame.call(this, id);
+      };
+      document.addEventListener("test:release-video-frames", () => {
+        released = true;
+        for (const callback of pending.values()) callback();
+        pending.clear();
+      });
+    });
+    await mockPlex(page, { trailer: "direct" });
+    await connect(page);
+    if (surface === "details") await recentCards(page).nth(1).click();
+    const host = page.locator(surface === "hero" ? ".hero" : ".details-dialog");
+    const video = host.locator("video");
+    await expect(video).toHaveAttribute("data-frame-ready", "true");
+    await expect(host.locator(".preview-state")).toHaveText(
+      "Finding your preview",
+    );
+    await expect(host.locator(".preview-spinner")).toBeVisible();
+    await expect(video).toHaveCSS("opacity", "0");
+    await expect(
+      host.getByRole("button", { name: "Play preview", exact: true }),
+    ).toBeDisabled();
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event("test:release-video-frames")),
+    );
+    await expect(host.locator("[data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "playing",
+    );
+    await expect(host.locator(".preview-state")).toHaveText("Preview playing");
+    await expect(video).toHaveCSS("opacity", "1");
+    await expect(video).toHaveCSS("transition-duration", "0.6s");
+    await expect(host.locator(".preview-spinner")).toHaveCount(0);
+  });
+
   test(`${surface} disables Play and shows status loading until media starts`, async ({
     page,
   }) => {
@@ -777,50 +1090,62 @@ test("diagnostics report failed playback without classifying it as missing metad
     row.getByRole("cell", { name: "Failed", exact: true }),
   ).toBeVisible();
 });
-test("diagnostics can test a searched movie outside the current catalog filters", async ({
-  page,
-}) => {
-  const requests = await mockPlex(page, { trailer: "direct" });
-  await connect(page);
-  await page.getByLabel("Search movies").fill("First Light");
-  await page.getByRole("button", { name: "Connection settings" }).click();
-  await page.getByRole("button", { name: "Trailer diagnostics" }).click();
-  await page.getByLabel("Find a movie to inspect").fill("Third Shore");
-  await page.getByRole("button", { name: "Inspect sample metadata" }).click();
-  await expect(page.getByRole("dialog")).toContainText(
-    "Metadata found; playback not verified",
-  );
-  expect(
-    requests.some((request) => request.path.startsWith("/library/parts/3/")),
-  ).toBe(false);
-  await page.getByRole("button", { name: "Test preview" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Third Shore", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByLabel("Search movies")).toHaveValue("");
-  await expect(page.locator("[data-preview-phase]")).toHaveAttribute(
-    "data-preview-phase",
-    "playing",
-    { timeout: 10000 },
-  );
-  await page.getByRole("button", { name: "Connection settings" }).click();
-  await page.getByRole("button", { name: "Trailer diagnostics" }).click();
-  await expect(
-    page.getByRole("row").filter({ hasText: "Third Shore" }),
-  ).toContainText("Playback verified");
-  const downloaded = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download report" }).click();
-  const report = JSON.parse(
-    await readFile((await (await downloaded).path())!, "utf8"),
-  );
-  expect(report.checks[0]).toMatchObject({
-    movieId: "3",
-    metadataFound: true,
-    urlResolved: true,
-    playbackSucceeded: true,
-    method: "Native direct play",
+for (const width of [1440, 390]) {
+  test(`diagnostics can test a searched movie outside the current catalog filters at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const requests = await mockPlex(page, { trailer: "direct" });
+    await connect(page);
+    await page.getByLabel("Search movies").fill("First Light");
+    await page.getByRole("button", { name: "Connection settings" }).click();
+    await page.getByRole("button", { name: "Trailer diagnostics" }).click();
+    await page.getByLabel("Find a movie to inspect").fill("Third Shore");
+    await page.getByRole("button", { name: "Inspect sample metadata" }).click();
+    await expect(page.getByRole("dialog")).toContainText(
+      "Metadata found; playback not verified",
+    );
+    expect(
+      requests.some((request) => request.path.startsWith("/library/parts/3/")),
+    ).toBe(false);
+    await page.getByRole("button", { name: "Test preview" }).click();
+    await expect(
+      page
+        .locator(width <= 540 ? ".details-dialog" : ".hero")
+        .getByRole("heading", { name: "Third Shore", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Search movies")).toHaveValue("");
+    await expect(page.locator("[data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "playing",
+      { timeout: 10000 },
+    );
+    if (width <= 540) {
+      await expect(page.locator(".hero [data-preview-phase]")).toHaveCount(0);
+      await page
+        .getByRole("button", { name: "Close Third Shore details" })
+        .click();
+      await expect(page.locator("video")).toHaveCount(0);
+    }
+    await page.getByRole("button", { name: "Connection settings" }).click();
+    await page.getByRole("button", { name: "Trailer diagnostics" }).click();
+    await expect(
+      page.getByRole("row").filter({ hasText: "Third Shore" }),
+    ).toContainText("Playback verified");
+    const downloaded = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download report" }).click();
+    const report = JSON.parse(
+      await readFile((await (await downloaded).path())!, "utf8"),
+    );
+    expect(report.checks[0]).toMatchObject({
+      movieId: "3",
+      metadataFound: true,
+      urlResolved: true,
+      playbackSucceeded: true,
+      method: "Native direct play",
+    });
   });
-});
+}
 test("cancelling diagnostics stops the sample and ignores a late metadata response", async ({
   page,
 }) => {
@@ -941,6 +1266,48 @@ test("small screens have no horizontal overflow and dialogs stay usable", async 
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
+test("phone hero stays quiet while details and wider viewports can play trailers", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 540, height: 844 });
+  const requests = await mockPlex(page, { trailer: "direct" });
+  await connect(page);
+  await expect(page.locator(".hero h1")).toHaveText("First Light");
+  await expect(page.locator(".hero [data-preview-phase]")).toHaveCount(0);
+  await page.waitForTimeout(1800);
+  expect(requests.some((r) => /^\/library\/metadata\/\d+$/.test(r.path))).toBe(
+    false,
+  );
+  expect(requests.some((r) => r.path.startsWith("/library/parts/"))).toBe(
+    false,
+  );
+
+  await page.getByRole("button", { name: "More info" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator("[data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  await expect(page.locator("video")).toHaveCount(1);
+  await page.getByRole("button", { name: "Close First Light details" }).click();
+  await expect(page.locator("video")).toHaveCount(0);
+  const before = requests.filter((r) =>
+    r.path.startsWith("/library/parts/"),
+  ).length;
+  await page.waitForTimeout(1800);
+  expect(
+    requests.filter((r) => r.path.startsWith("/library/parts/")),
+  ).toHaveLength(before);
+
+  await page.setViewportSize({ width: 541, height: 844 });
+  await expect(page.locator(".hero [data-preview-phase]")).toHaveAttribute(
+    "data-preview-phase",
+    "playing",
+  );
+  await page.setViewportSize({ width: 540, height: 844 });
+  await expect(page.locator("video")).toHaveCount(0);
+});
+
 test("lower rail focus stays quiet and opens a trailer only in details", async ({
   page,
 }) => {
@@ -985,6 +1352,56 @@ test("lower rail focus stays quiet and opens a trailer only in details", async (
   ).toBe(false);
 });
 
+for (const width of [1440, 390]) {
+  test(`hero details have no category navigation at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockPlex(page, { trailer: "missing" });
+    await connect(page);
+    const opener = page.getByRole("button", { name: "More info" });
+    await opener.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator(".details-navigation")).toHaveCount(0);
+    await expect(dialog.locator(".details-position")).toHaveCount(0);
+    await expect(
+      dialog.getByRole("button", { name: "Previous movie" }),
+    ).toHaveCount(0);
+    await expect(
+      dialog.getByRole("button", { name: "Next movie" }),
+    ).toHaveCount(0);
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowLeft");
+    await dialog.locator(".details-copy").evaluate((element) => {
+      const touch = (x: number) =>
+        new Touch({ identifier: 1, target: element, clientX: x, clientY: 500 });
+      element.dispatchEvent(
+        new TouchEvent("touchstart", { bubbles: true, touches: [touch(150)] }),
+      );
+      element.dispatchEvent(
+        new TouchEvent("touchend", {
+          bubbles: true,
+          changedTouches: [touch(30)],
+        }),
+      );
+    });
+    await expect(
+      dialog.getByRole("heading", { name: "First Light", exact: true }),
+    ).toBeVisible();
+    await dialog
+      .getByRole("button", { name: "Close First Light details" })
+      .click();
+    await expect(opener).toBeFocused();
+
+    await recentCards(page).first().click();
+    await expect(dialog.getByRole("status")).toContainText("1 of 3");
+    await dialog.getByRole("button", { name: "Next movie" }).click();
+    await expect(
+      dialog.getByRole("heading", { name: "Second Chance", exact: true }),
+    ).toBeVisible();
+  });
+}
+
 test("details navigation stays in the opening category and restores focus and page position", async ({
   page,
 }) => {
@@ -1021,6 +1438,151 @@ test("details navigation stays in the opening category and restores focus and pa
   expect(await page.evaluate(() => scrollY)).toBe(position);
 });
 
+for (const width of [1440, 390]) {
+  test(`long movie details stay readable and navigable at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 620 });
+    await mockPlex(page, { trailer: "missing" });
+    const title =
+      "A Very Long Fictional Movie Title Across Many Lines: " +
+      "BeyondTheEdgeOfTheKnownUniverse".repeat(4);
+    const summary =
+      "A fictional traveler explores distant worlds and returns to tell a story about friendship and discovery. ".repeat(
+        25,
+      );
+    await page.route("**/plex/library/sections/1/all?*", (route) =>
+      route.fulfill({
+        json: {
+          MediaContainer: {
+            totalSize: films.length,
+            Metadata: films.map((film, index) =>
+              index === 1 ? { ...film, title, summary } : film,
+            ),
+          },
+        },
+      }),
+    );
+    await connect(page);
+    await recentCards(page).nth(1).click();
+    const dialog = page.getByRole("dialog");
+    const heading = dialog.getByRole("heading", { name: title, exact: true });
+    await expect(heading).toHaveText(title);
+    const synopsis = dialog.locator(".details-summary");
+    await expect(synopsis).toHaveText(summary.trim());
+    await expect
+      .poll(() =>
+        synopsis.evaluate(
+          (element) =>
+            element.clientHeight <=
+            parseFloat(getComputedStyle(element).lineHeight) * 5 + 1,
+        ),
+      )
+      .toBe(true);
+    const more = dialog.getByRole("button", { name: "Read more", exact: true });
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await more.click();
+    await expect(
+      dialog.getByRole("button", { name: "Read less", exact: true }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      await synopsis.evaluate((element) => element.clientHeight),
+    ).toBeGreaterThan(300);
+    await dialog
+      .getByRole("button", { name: "Read less", exact: true })
+      .click();
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await dialog
+      .getByRole("link", { name: "Open in Plex" })
+      .scrollIntoViewIfNeeded();
+    await page.setViewportSize({ width, height: 420 });
+    await dialog.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    const bounds = await dialog.boundingBox();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(420);
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    const close = dialog.getByRole("button", {
+      name: `Close ${title} details`,
+    });
+    const closeBounds = await close.boundingBox();
+    expect(closeBounds!.y).toBeGreaterThanOrEqual(bounds!.y);
+    expect(closeBounds!.y + closeBounds!.height).toBeLessThanOrEqual(
+      bounds!.y + bounds!.height,
+    );
+    await page.screenshot({ path: `work/details-long-${width}.png` });
+    await dialog.getByRole("button", { name: "Next movie" }).click();
+    await expect(
+      dialog.getByRole("heading", { name: "Third Shore", exact: true }),
+    ).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Read more" })).toHaveCount(
+      0,
+    );
+    await dialog.getByRole("button", { name: "Previous movie" }).click();
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await close.click();
+    await expect(dialog).toHaveCount(0);
+    await expect(recentCards(page).nth(1)).toBeFocused();
+  });
+}
+
+test("Recently Added caps posters and details navigation at the latest 25 films", async ({
+  page,
+}) => {
+  await mockPlex(page, { trailer: "missing" });
+  await page.route("**/plex/library/sections/1/all?*", (route) =>
+    route.fulfill({
+      json: {
+        MediaContainer: {
+          totalSize: 40,
+          Metadata: Array.from({ length: 40 }, (_, index) => ({
+            ...films[0],
+            ratingKey: String(index + 1),
+            key: `/library/metadata/${index + 1}`,
+            title: `Synthetic film ${index + 1}`,
+            addedAt: index + 1,
+          })),
+        },
+      },
+    }),
+  );
+  await connect(page);
+  const rail = page.getByRole("region", {
+    name: "Recently Added",
+    exact: true,
+  });
+  await expect(rail.locator("[data-movie]")).toHaveCount(25);
+  await expect(rail.getByRole("heading")).toHaveText("Recently Added25");
+  await expect(rail.getByRole("button", { name: "Show more" })).toHaveCount(0);
+  await expect(rail.locator("[data-movie]").first()).toHaveAttribute(
+    "data-movie",
+    "40",
+  );
+  await expect(rail.locator("[data-movie]").last()).toHaveAttribute(
+    "data-movie",
+    "16",
+  );
+  await expect(
+    page
+      .getByRole("region", { name: "Drama", exact: true })
+      .getByRole("button", { name: "Show more" }),
+  ).toBeVisible();
+  await rail.locator("[data-movie]").last().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("status")).toContainText("25 of 25");
+  await expect(
+    dialog.getByRole("button", { name: "Next movie" }),
+  ).toBeDisabled();
+  await expect(
+    dialog.getByRole("heading", { name: "Synthetic film 16", exact: true }),
+  ).toBeVisible();
+});
+
 test("filtered categories define the dialog sequence and a single result disables both directions", async ({
   page,
 }) => {
@@ -1049,6 +1611,90 @@ test("filtered categories define the dialog sequence and a single result disable
   await expect(recentCards(page)).toHaveCount(1);
 });
 
+for (const width of [1440, 390]) {
+  test(`rapid details navigation never pairs a new title with the previous artwork at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockPlex(page, { trailer: "missing" });
+    await page.route("**/plex/library/sections/1/all?*", (route) =>
+      route.fulfill({
+        json: {
+          MediaContainer: {
+            totalSize: films.length,
+            Metadata: films.map((film) => ({
+              ...film,
+              art: `/library/metadata/${film.ratingKey}/art/fixture`,
+              thumb: `/library/metadata/${film.ratingKey}/thumb/fixture`,
+            })),
+          },
+        },
+      }),
+    );
+    let releaseSecond!: () => void;
+    const secondGate = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+    let secondPending = false;
+    await page.route("**/plex/photo/**", async (route) => {
+      const source = new URL(route.request().url()).searchParams.get("url")!;
+      const id = source.split("/")[3];
+      if (id === "2") {
+        secondPending = true;
+        await secondGate;
+      }
+      await route.fulfill({
+        contentType: "image/svg+xml",
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="${100 + Number(id)}" height="100"><rect width="100%" height="100%" fill="${id === "1" ? "red" : id === "2" ? "blue" : "green"}"/></svg>`,
+      });
+    });
+    try {
+      await connect(page);
+      await recentCards(page).first().click();
+      const dialog = page.getByRole("dialog");
+      const art = dialog.locator(".details-visual > img.artwork");
+      await expect(art).toHaveAttribute("aria-busy", "false");
+      const first = await art.elementHandle();
+      await dialog.getByRole("button", { name: "Next movie" }).click();
+      await expect(
+        dialog.getByRole("heading", { name: "Second Chance", exact: true }),
+      ).toBeVisible();
+      await expect.poll(() => secondPending).toBe(true);
+      expect(await first!.evaluate((image) => image.isConnected)).toBe(false);
+      await expect(art).toHaveAttribute("aria-busy", "true");
+      await expect(art).toHaveCSS("opacity", "0");
+      await dialog.getByRole("button", { name: "Next movie" }).click();
+      await expect(
+        dialog.getByRole("heading", { name: "Third Shore", exact: true }),
+      ).toBeVisible();
+      await expect(art).toHaveAttribute("aria-busy", "false");
+      await expect
+        .poll(() => art.evaluate((image) => image.naturalWidth))
+        .toBe(103);
+      const third = await art.elementHandle();
+      const late = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).searchParams.get("url") ===
+          "/library/metadata/2/art/fixture",
+      );
+      releaseSecond();
+      await (await late).finished();
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
+      expect(await third!.evaluate((image) => image.isConnected)).toBe(true);
+      await expect(art).toHaveAttribute("aria-busy", "false");
+      await expect
+        .poll(() => art.evaluate((image) => image.naturalWidth))
+        .toBe(103);
+    } finally {
+      releaseSecond();
+    }
+  });
+}
 test("rapid dialog navigation cancels intermediate previews and keeps one player", async ({
   page,
 }) => {
@@ -1232,14 +1878,13 @@ test("hero is randomly chosen and stays stable through hover, filters and detail
       .getByRole("dialog")
       .getByRole("heading", { name: "Third Shore", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Previous movie" })
-    .click();
+  await expect(page.locator(".details-navigation")).toHaveCount(0);
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowRight");
   await expect(
     page
       .getByRole("dialog")
-      .getByRole("heading", { name: "Second Chance", exact: true }),
+      .getByRole("heading", { name: "Third Shore", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(hero.locator("h1")).toHaveText("Third Shore");
@@ -1538,7 +2183,7 @@ for (const engine of ["native", "mse"] as const) {
     const first = await hero.locator("video").elementHandle();
     const source = await first!.evaluate((video) => video.src);
     await hero.getByRole("button", { name: "Unmute preview" }).click();
-    await hero.getByRole("button", { name: "More info" }).click();
+    await recentCards(page).first().click();
     const dialog = page.getByRole("dialog");
     await playing(dialog);
     expect(await dialog.locator("video").evaluate((video) => video.src)).toBe(
@@ -1654,7 +2299,7 @@ test("a failed retained restart rebuilds through a fresh approved Plex session",
     "playing",
   );
   const first = await hero.locator("video").elementHandle();
-  await hero.getByRole("button", { name: "More info" }).click();
+  await recentCards(page).first().click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.locator("[data-preview-phase]")).toHaveAttribute(
     "data-preview-phase",
