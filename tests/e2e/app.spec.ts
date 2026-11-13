@@ -347,6 +347,52 @@ test("welcome and sample catalog are polished, usable, and entirely local", asyn
   expect(errors).toEqual([]);
   expect(external).toEqual([]);
 });
+test("refresh restores the library and Discover or Unwatched without restoring other filters", async ({
+  page,
+}) => {
+  await mockPlex(page, {
+    trailer: "missing",
+    libraries: [
+      { key: "1", title: "Movies" },
+      { key: "2", title: "Archive" },
+    ],
+  });
+  await connect(page);
+  await page.getByLabel("Movie library", { exact: true }).selectOption("2");
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await nav.getByRole("button", { name: "Unwatched", exact: true }).click();
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await page.getByLabel("Genre", { exact: true }).selectOption("Drama");
+  await page.getByLabel("Search movies").fill("First Light");
+  await expect(recentCards(page)).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByLabel("Movie library", { exact: true })).toHaveValue(
+    "2",
+  );
+  await expect(
+    nav.getByRole("button", { name: "Unwatched", exact: true }),
+  ).toHaveClass(/active/);
+  await expect(recentCards(page)).toHaveCount(2);
+  await expect(
+    page.getByRole("region", { name: "Unwatched Movies", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Search movies")).toHaveValue("");
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await expect(page.getByLabel("Genre", { exact: true })).toHaveValue("");
+  await nav.getByRole("button", { name: "Discover", exact: true }).click();
+  await page.reload();
+  await expect(
+    nav.getByRole("button", { name: "Discover", exact: true }),
+  ).toHaveClass(/active/);
+  await expect(recentCards(page)).toHaveCount(3);
+  await expect(
+    page.getByRole("region", { name: "Unwatched Movies", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => localStorage.getItem("trafirdis.catalog-view")),
+  ).toBe("discover");
+});
+
 test("combines filters without additional Plex requests and supports keyboard navigation", async ({
   page,
 }) => {

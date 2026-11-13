@@ -131,3 +131,9 @@ The maintainer approved trying bounded adjacent-trailer preloading during catego
 Details retain complete wrapping titles, with responsive mobile typography. Long synopses initially show five lines and expose Read more / Read less only when measured text overflows. The toggle reports its expanded state and controls the synopsis paragraph; switching films resets it. Short synopses need no extra control.
 
 Dialog height uses dynamic viewport units with a viewport-height fallback, allowing for mobile browser bars. Synthetic desktop/mobile checks exercise long titles and synopses, expansion/collapse, navigation reset, short viewport resizing, accessible sticky controls, no horizontal overflow and focus restoration.
+
+## Catalog view preference — 2026-11-13
+
+Discover/Unwatched is restored on refresh from the browser-wide `trafirdis.catalog-view` local-storage entry. It stores only `discover` or `unwatched`, derived from the existing watch-status filter. Search and other filters remain transient; actions that already clear all filters also return the remembered view to Discover. The existing server-scoped library preference is unchanged. Invalid or missing view preferences use Discover, and blocked storage preserves in-memory switching. No credentials or movie data are added to persistent storage. The preference survives disconnect; clearing site data removes it.
+
+Unit checks cover restoration, transient filter reset, invalid values and blocked storage. Browser checks verify that both library and view survive reload, the correct watched films/categories are shown, and selecting Discover persists the return to the full catalog.

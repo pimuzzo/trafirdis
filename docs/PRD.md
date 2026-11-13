@@ -316,6 +316,8 @@ Allow combining multiple filters.
 
 For the MVP, all filtering may happen client-side.
 
+Remember the last Discover/Unwatched view in browser local storage and restore it on refresh alongside the selected library. Persist only the view, leaving search and other filters transient. Default to Discover when no valid preference exists; storage failures must preserve in-memory browsing. The preference survives disconnect and is removed by clearing site data.
+
 On supported desktop browsers, native select menus open after mouse release so the opening click cannot also choose an option. Preserve keyboard and touch behavior, with a native fallback when picker support is missing or denied. Focus outlines use the shared amber styling with a 1px offset to avoid overlapping adjacent controls.
 
 ## 6. Data and Caching

@@ -20,6 +20,7 @@ import { Hero } from "./Hero";
 import { TrailerService } from "../trailer/service";
 import { Preview } from "./Preview";
 import { useMovieLibrary } from "../hooks/useMovieLibrary";
+import { useCatalogFilters } from "../hooks/useCatalogFilters";
 import { useFeaturedMovie } from "../hooks/useFeaturedMovie";
 import { Select } from "./Select";
 const Diagnostics = diagnosticsEnabled
@@ -74,7 +75,7 @@ export default function Catalog({
     document.addEventListener("keydown", shortcut);
     return () => document.removeEventListener("keydown", shortcut);
   }, []);
-  const [filters, setFilters] = useState(emptyFilters);
+  const [filters, setFilters] = useCatalogFilters();
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState("");
   const [details, setDetails] = useState<{

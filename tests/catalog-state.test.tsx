@@ -2,6 +2,8 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMovieLibrary } from "../src/hooks/useMovieLibrary";
 import { useFeaturedMovie } from "../src/hooks/useFeaturedMovie";
+import { useCatalogFilters } from "../src/hooks/useCatalogFilters";
+import { emptyFilters } from "../src/domain/movie";
 import type { Movie } from "../src/domain/movie";
 const movie = (overrides: Partial<Movie> = {}): Movie => ({
   id: "1",
@@ -82,6 +84,54 @@ describe("movie library preference", () => {
     const { result } = renderHook(() => useMovieLibrary("server-a", libraries));
     act(() => result.current.selectLibrary("2"));
     expect(result.current.libraryId).toBe("2");
+  });
+});
+
+describe("catalog view preference", () => {
+  it("restores Unwatched after remount without restoring search or other filters", () => {
+    const first = renderHook(() => useCatalogFilters());
+    act(() =>
+      first.result.current[1]({
+        ...emptyFilters,
+        watched: "unwatched",
+        search: "A fictional query",
+        genre: "Drama",
+      }),
+    );
+    expect(localStorage.getItem("trafirdis.catalog-view")).toBe("unwatched");
+    expect(localStorage.length).toBe(1);
+    first.unmount();
+    const restored = renderHook(() => useCatalogFilters());
+    expect(restored.result.current[0]).toEqual({
+      ...emptyFilters,
+      watched: "unwatched",
+    });
+    act(() => restored.result.current[1](emptyFilters));
+    restored.unmount();
+    const discover = renderHook(() => useCatalogFilters());
+    expect(discover.result.current[0]).toEqual(emptyFilters);
+    expect(localStorage.getItem("trafirdis.catalog-view")).toBe("discover");
+  });
+  it.each(["discover", "watched", "unknown", ""])(
+    "defaults to Discover for saved value %s",
+    (value) => {
+      localStorage.setItem("trafirdis.catalog-view", value);
+      const { result } = renderHook(() => useCatalogFilters());
+      expect(result.current[0]).toEqual(emptyFilters);
+    },
+  );
+  it("keeps view switching usable when browser storage is blocked", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("Blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("Blocked");
+    });
+    const { result } = renderHook(() => useCatalogFilters());
+    act(() => result.current[1]({ ...emptyFilters, watched: "unwatched" }));
+    expect(result.current[0].watched).toBe("unwatched");
+    act(() => result.current[1](emptyFilters));
+    expect(result.current[0].watched).toBe("");
   });
 });
 
