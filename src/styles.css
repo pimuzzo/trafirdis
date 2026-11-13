@@ -776,6 +776,9 @@ input::placeholder {
   transform: translateY(-3px);
   border-color: #e9b87899;
 }
+.artwork.is-loading {
+  opacity: 0;
+}
 .artwork-poster {
   object-fit: cover;
   width: 100%;

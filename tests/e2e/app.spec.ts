@@ -1488,6 +1488,90 @@ test("filtered categories define the dialog sequence and a single result disable
   await expect(recentCards(page)).toHaveCount(1);
 });
 
+for (const width of [1440, 390]) {
+  test(`rapid details navigation never pairs a new title with the previous artwork at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockPlex(page, { trailer: "missing" });
+    await page.route("**/plex/library/sections/1/all?*", (route) =>
+      route.fulfill({
+        json: {
+          MediaContainer: {
+            totalSize: films.length,
+            Metadata: films.map((film) => ({
+              ...film,
+              art: `/library/metadata/${film.ratingKey}/art/fixture`,
+              thumb: `/library/metadata/${film.ratingKey}/thumb/fixture`,
+            })),
+          },
+        },
+      }),
+    );
+    let releaseSecond!: () => void;
+    const secondGate = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+    let secondPending = false;
+    await page.route("**/plex/photo/**", async (route) => {
+      const source = new URL(route.request().url()).searchParams.get("url")!;
+      const id = source.split("/")[3];
+      if (id === "2") {
+        secondPending = true;
+        await secondGate;
+      }
+      await route.fulfill({
+        contentType: "image/svg+xml",
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="${100 + Number(id)}" height="100"><rect width="100%" height="100%" fill="${id === "1" ? "red" : id === "2" ? "blue" : "green"}"/></svg>`,
+      });
+    });
+    try {
+      await connect(page);
+      await recentCards(page).first().click();
+      const dialog = page.getByRole("dialog");
+      const art = dialog.locator(".details-visual > img.artwork");
+      await expect(art).toHaveAttribute("aria-busy", "false");
+      const first = await art.elementHandle();
+      await dialog.getByRole("button", { name: "Next movie" }).click();
+      await expect(
+        dialog.getByRole("heading", { name: "Second Chance", exact: true }),
+      ).toBeVisible();
+      await expect.poll(() => secondPending).toBe(true);
+      expect(await first!.evaluate((image) => image.isConnected)).toBe(false);
+      await expect(art).toHaveAttribute("aria-busy", "true");
+      await expect(art).toHaveCSS("opacity", "0");
+      await dialog.getByRole("button", { name: "Next movie" }).click();
+      await expect(
+        dialog.getByRole("heading", { name: "Third Shore", exact: true }),
+      ).toBeVisible();
+      await expect(art).toHaveAttribute("aria-busy", "false");
+      await expect
+        .poll(() => art.evaluate((image) => image.naturalWidth))
+        .toBe(103);
+      const third = await art.elementHandle();
+      const late = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).searchParams.get("url") ===
+          "/library/metadata/2/art/fixture",
+      );
+      releaseSecond();
+      await (await late).finished();
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
+      expect(await third!.evaluate((image) => image.isConnected)).toBe(true);
+      await expect(art).toHaveAttribute("aria-busy", "false");
+      await expect
+        .poll(() => art.evaluate((image) => image.naturalWidth))
+        .toBe(103);
+    } finally {
+      releaseSecond();
+    }
+  });
+}
 test("rapid dialog navigation cancels intermediate previews and keeps one player", async ({
   page,
 }) => {
