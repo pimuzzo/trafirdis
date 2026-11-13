@@ -7,8 +7,10 @@ import {
   signInMessage,
   signInUrl,
   type PendingSignIn,
+  type PlexResource,
 } from "../plex/auth";
 import { getClientIdentifier } from "../plex/device";
+import { preferredServer, type PlexConnection } from "../plex/connection";
 function waitForPoll(signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const cancel = () => {
@@ -23,7 +25,7 @@ function waitForPoll(signal: AbortSignal): Promise<void> {
     if (signal.aborted) cancel();
   });
 }
-export function usePlexSignIn(onConnect: (token: string) => void) {
+export function usePlexSignIn(onConnect: (connection: PlexConnection) => void) {
   const [initial] = useState(() => {
     try {
       return { pending: readSignInReturn(), error: "" };
@@ -31,10 +33,11 @@ export function usePlexSignIn(onConnect: (token: string) => void) {
       return { pending: null, error: signInMessage(error) };
     }
   });
-  const [status, setStatus] = useState<"idle" | "starting" | "finishing">(
-    initial.pending ? "finishing" : "idle",
-  );
+  const [status, setStatus] = useState<
+    "idle" | "starting" | "finishing" | "choosing" | "connecting"
+  >(initial.pending ? "finishing" : "idle");
   const [message, setMessage] = useState(initial.error);
+  const [servers, setServers] = useState<PlexResource[]>([]);
   const active = useRef<AbortController | null>(null);
   const cancel = useCallback(() => {
     active.current?.abort();
@@ -42,6 +45,7 @@ export function usePlexSignIn(onConnect: (token: string) => void) {
     clearSignInReturn();
     setStatus("idle");
     setMessage("");
+    setServers([]);
   }, []);
   useEffect(() => {
     if (!initial.pending) return;
@@ -57,10 +61,30 @@ export function usePlexSignIn(onConnect: (token: string) => void) {
           token = await client.checkPin(pending, controller.signal);
           if (!token) await waitForPoll(controller.signal);
         }
-        const serverToken = await client.serverToken(token, controller.signal);
+        const available = await client.resources(token, controller.signal);
+        token = null;
         if (controller.signal.aborted) return;
         clearSignInReturn();
-        onConnect(serverToken);
+        setServers(available);
+        const preferred = available.find((s) => s.id === preferredServer());
+        const selected =
+          preferred || (available.length === 1 ? available[0] : undefined);
+        if (selected) {
+          setStatus("connecting");
+          try {
+            const connection = await client.connectServer(
+              selected,
+              controller.signal,
+            );
+            if (controller.signal.aborted) return;
+            setServers([]);
+            onConnect(connection);
+          } catch (error) {
+            if (controller.signal.aborted) return;
+            setStatus("choosing");
+            setMessage(signInMessage(error));
+          }
+        } else setStatus("choosing");
       } catch (error) {
         if (!controller.signal.aborted) {
           clearSignInReturn();
@@ -73,12 +97,34 @@ export function usePlexSignIn(onConnect: (token: string) => void) {
     return () => controller.abort();
   }, [initial, onConnect]);
   useEffect(() => () => active.current?.abort(), []);
+  const choose = async (server: PlexResource) => {
+    active.current?.abort();
+    const controller = new AbortController();
+    active.current = controller;
+    setStatus("connecting");
+    setMessage("");
+    try {
+      const connection = await new PlexSignInClient().connectServer(
+        server,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      setServers([]);
+      onConnect(connection);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setStatus("choosing");
+        setMessage(signInMessage(error));
+      }
+    }
+  };
   const start = async () => {
     active.current?.abort();
     const controller = new AbortController();
     active.current = controller;
     setStatus("starting");
     setMessage("");
+    setServers([]);
     try {
       // A round-trip must be resumable before opening Plex's hosted sign-in.
       try {
@@ -114,5 +160,13 @@ export function usePlexSignIn(onConnect: (token: string) => void) {
       }
     }
   };
-  return { start, cancel, status, message, busy: status !== "idle" };
+  return {
+    start,
+    cancel,
+    choose,
+    servers,
+    status,
+    message,
+    busy: status !== "idle",
+  };
 }

@@ -65,45 +65,50 @@
       <h2>Connections and data</h2>
       <p>
         The application reads movie metadata, artwork and watch status from the
-        Plex Media Server configured by your deployment. Preview streams pass
-        through the same fixed server proxy. There is no Trafirdis account
-        service, database, analytics SDK or telemetry.
+        Plex Media Server you select after signing in. The browser connects
+        directly to the selected server for catalog, artwork and previews. There
+        is no Trafirdis account service, database, analytics SDK or telemetry.
       </p>
       <p>
         Sign in with Plex opens Plex's official website. Passwords and
         two-factor codes stay there. The browser contacts Plex's authentication
-        and resource APIs to authorize access and identify the configured
-        server. The account token is used transiently for this lookup; only the
-        verified server token is saved for the browser session. Manual token
-        entry avoids the hosted sign-in requests.
+        and resource APIs to authorize access and list your owned and shared
+        servers. Only the selected server is contacted, and its identity and
+        access are checked before connecting. The account token is used
+        transiently for this lookup; only the verified server token is saved for
+        the browser session. Manual token entry avoids the hosted sign-in
+        requests.
       </p>
       <h2>Local storage and diagnostics</h2>
       <p>
-        The server access token and unfinished sign-in state use this tab's
-        session storage. A public client identifier uses local storage, with
-        session and memory fallbacks, to preserve this app instance's identity.
-        The selected movie-library ID is also remembered in local storage for
-        each configured server. The last Discover/Unwatched view is remembered
-        for this browser as well; search text and other filters are not saved.
-        These preferences remain after disconnecting; clearing this site's
-        browser data removes them. Catalog and trailer caches stay in memory. Up
-        to two recently playing HLS previews can also keep their browser buffers
-        and open Plex sessions paused and muted for 30 seconds to speed up
-        returning to a trailer. They are not saved to persistent storage.
-        Expiry, eviction, settings and disconnect release them; Plex may
-        temporarily retain transcoding resources. Active previews continue when
-        switching browser tabs, including audio if you enabled it; use Pause
-        preview to stop playback. The sample library uses local fictional
-        content.
+        The selected server address, access token and unfinished sign-in state
+        use this tab's session storage. A public client identifier uses local
+        storage, with session and memory fallbacks, to preserve this app
+        instance's identity. The selected movie-library ID is also remembered in
+        local storage for each server. Your last selected server ID is also
+        remembered locally without a token and checked against your account at
+        the next sign-in. The last Discover/Unwatched view is remembered for
+        this browser as well; search text and other filters are not saved. These
+        preferences remain after disconnecting; clearing this site's browser
+        data removes them. Catalog and trailer caches stay in memory. Up to two
+        recently playing HLS previews can also keep their browser buffers and
+        open Plex sessions paused and muted for 30 seconds to speed up returning
+        to a trailer. They are not saved to persistent storage. Expiry,
+        eviction, settings and disconnect release them; Plex may temporarily
+        retain transcoding resources. Active previews continue when switching
+        browser tabs, including audio if you enabled it; use Pause preview to
+        stop playback. The sample library uses local fictional content.
       </p>
       <p>
         Disconnect clears local access and catalog caches. It does not revoke
         Plex's Authorized Devices entry; manage that through Plex's account
         settings. Browser extensions and scripts with access to this origin may
         read session tokens. Native artwork/video URLs contain authentication,
-        so browser tools and an additional reverse proxy may see it. Built-in
-        request logging is disabled or sanitized, and HTTP LAN traffic is not
-        encrypted.
+        so browser tools and the selected Plex server may see them. The static
+        application host receives no Plex credentials or media requests during
+        normal operation; scripts served by that host can access browser
+        credentials, so use a trusted deployment. Built-in request logging is
+        disabled or sanitized, and HTTP LAN traffic is not encrypted.
       </p>
       <p>
         Optional diagnostics create reports locally when you choose Download
@@ -113,10 +118,11 @@
       </p>
       <h2>Your deployment</h2>
       <p>
-        Your deployment operator controls the Plex address, network exposure and
-        any additional proxy logs. Clearing browser data removes stored access
-        and the public client identifier. Consult Plex's policies for Plex's
-        processing and account controls.
+        Your deployment operator controls application hosting, network exposure
+        and any additional hosting logs. You choose the server for direct
+        connections; your browser must be able to reach it securely. Clearing
+        browser data removes stored access and the public client identifier.
+        Consult Plex's policies for Plex's processing and account controls.
       </p>
       <p>
         <a

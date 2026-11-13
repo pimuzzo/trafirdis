@@ -11,7 +11,7 @@ const metadata = {
   Extras: { Metadata: [{ subtype: "trailer", key: "/library/metadata/101" }] },
 };
 function setup() {
-  const client = new PlexClient("private-token");
+  const client = new PlexClient("private-token", "http://127.0.0.1:32401");
   const details = vi.spyOn(client, "details").mockResolvedValue(metadata);
   const service = new TrailerService(client);
   return { client, details, service };
@@ -164,6 +164,7 @@ describe("metadata diagnostics", () => {
   it("retains a safe numeric HTTP status from actual Plex request failures", async () => {
     const client = new PlexClient(
       "private-token",
+      "http://127.0.0.1:32401",
       vi.fn().mockResolvedValue(new Response("private body", { status: 503 })),
     );
     await expect(client.request("/library/metadata/1")).rejects.toMatchObject({

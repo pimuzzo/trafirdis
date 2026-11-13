@@ -15,9 +15,8 @@ RUN npm run build && chmod -R a+rX /app/dist
 FROM nginx:stable-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY --chmod=644 NOTICE /usr/share/nginx/html/NOTICE
-COPY --chmod=644 docker/nginx.conf.template /etc/nginx/trafirdis.conf.template
+COPY --chmod=644 docker/nginx.conf /etc/nginx/trafirdis.conf
 COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/trafirdis-entrypoint
-ENV PLEX_SERVER_URL=http://192.168.178.46:32400
 USER nginx
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

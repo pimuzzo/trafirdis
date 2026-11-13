@@ -1,5 +1,16 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Allow-Methods": "GET,HEAD,OPTIONS",
+};
+function fulfillRoute(route: Route, options: Parameters<Route["fulfill"]>[0]) {
+  return route.fulfill({
+    ...options,
+    headers: { ...corsHeaders, ...options?.headers },
+  });
+}
 test.beforeEach(async ({ page }) => {
   // Keep existing playback fixtures deterministic; random selection has its own case.
   await page.addInitScript(() => {
@@ -69,17 +80,22 @@ async function mockPlex(
     return params.toString();
   };
   const fulfill = (route: Route, MediaContainer: unknown) =>
-    route.fulfill({ json: { MediaContainer } });
-  await page.route("http://127.0.0.1:5175/plex/**", async (route) => {
+    fulfillRoute(route, { json: { MediaContainer } });
+  await page.route("http://127.0.0.1:32401/**", async (route) => {
+    if (route.request().method() === "OPTIONS")
+      return fulfillRoute(route, { status: 204 });
     const url = new URL(route.request().url());
-    const path = url.pathname.replace(/^\/plex/, "");
+    const path = url.pathname;
     requests.push({
       path,
       method: route.request().method(),
       token: route.request().headers()["x-plex-token"],
     });
     if (options.status)
-      return route.fulfill({ status: options.status, body: "Invalid token" });
+      return fulfillRoute(route, {
+        status: options.status,
+        body: "Invalid token",
+      });
     if (path === "/")
       return fulfill(route, {
         friendlyName: "Test server",
@@ -104,7 +120,7 @@ async function mockPlex(
             : films,
       });
     if (path.startsWith("/photo/"))
-      return route.fulfill({
+      return fulfillRoute(route, {
         path: "public/sample/art-0.svg",
         contentType: "image/svg+xml",
       });
@@ -152,13 +168,14 @@ async function mockPlex(
     }
     if (path.startsWith("/library/parts/"))
       return options.trailer === "broken"
-        ? route.fulfill({ status: 404 })
-        : route.fulfill({
+        ? fulfillRoute(route, { status: 404 })
+        : fulfillRoute(route, {
             body: await readFile("tests/fixtures/preview.webm"),
             contentType: "video/webm",
           });
     if (path.endsWith("/decision")) {
-      if (options.decision === "auth") return route.fulfill({ status: 401 });
+      if (options.decision === "auth")
+        return fulfillRoute(route, { status: 401 });
       decisions.set(url.searchParams.get("session")!, signature(url));
       return fulfill(
         route,
@@ -173,28 +190,32 @@ async function mockPlex(
     }
     if (path.endsWith("start.m3u8")) {
       if (decisions.get(url.searchParams.get("session")!) !== signature(url))
-        return route.fulfill({ status: 400, body: "Session lacks decision" });
-      if (options.trailer === "broken") return route.fulfill({ status: 404 });
+        return fulfillRoute(route, {
+          status: 400,
+          body: "Session lacks decision",
+        });
+      if (options.trailer === "broken")
+        return fulfillRoute(route, { status: 404 });
       if (options.trailer === "external")
-        return route.fulfill({
+        return fulfillRoute(route, {
           body: "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:6.0,\nhttps://outside.example/segment.ts\n#EXT-X-ENDLIST\n",
           contentType: "application/vnd.apple.mpegurl",
         });
-      return route.fulfill({
+      return fulfillRoute(route, {
         body: await readFile("tests/fixtures/preview.m3u8"),
         contentType: "application/vnd.apple.mpegurl",
       });
     }
     if (path.endsWith(".ts"))
-      return route.fulfill({
+      return fulfillRoute(route, {
         body: await readFile("tests/fixtures/segment-0.ts"),
         contentType: "video/mp2t",
       });
     if (path.endsWith("/stop")) {
       decisions.delete(url.searchParams.get("session")!);
-      return route.fulfill({ status: 200, body: "" });
+      return fulfillRoute(route, { status: 200, body: "" });
     }
-    return route.fulfill({ status: 404 });
+    return fulfillRoute(route, { status: 404 });
   });
   return requests;
 }
@@ -211,6 +232,7 @@ async function connect(page: Page, random?: number) {
     }, random);
   await page.mouse.move(0, 0);
   await page.getByText("Use a Plex token instead", { exact: true }).click();
+  await page.getByLabel("Plex server address").fill("http://127.0.0.1:32401");
   await page.getByLabel("Plex authentication token").fill("fixture-token");
   await page
     .getByRole("button", { name: "Connect my library", exact: true })
@@ -264,11 +286,24 @@ test("Trafirdis reuses its browser session and keeps the device identity on disc
   await mockPlex(page, { trailer: "missing" });
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (path === "/plex/" || path === "/plex/library/sections")
+    if (
+      new URL(request.url()).origin === "http://127.0.0.1:32401" &&
+      (path === "/" || path === "/library/sections")
+    )
       identityHeaders.push(request.headers());
   });
   await page.addInitScript(() => {
-    sessionStorage.setItem("trafirdis.token", "existing-session-token");
+    if (!sessionStorage.getItem("trafirdis.test-session-seeded")) {
+      sessionStorage.setItem("trafirdis.token", "existing-session-token");
+      sessionStorage.setItem(
+        "trafirdis.server",
+        JSON.stringify({
+          base: "http://127.0.0.1:32401",
+          machineIdentifier: "test-machine",
+        }),
+      );
+      sessionStorage.setItem("trafirdis.test-session-seeded", "1");
+    }
     localStorage.setItem("trafirdis.client-id", "existing-device-identifier");
   });
   await page.goto("/");
@@ -841,7 +876,7 @@ for (const surface of ["hero", "details"] as const) {
     let metadataRequests = 0;
     let mediaRequests = 0;
     await page.route(
-      (url) => url.pathname === `/plex/library/metadata/${id}`,
+      (url) => url.pathname === `/library/metadata/${id}`,
       async (route) => {
         metadataRequests++;
         await metadataGate;
@@ -849,7 +884,7 @@ for (const surface of ["hero", "details"] as const) {
       },
     );
     await page.route(
-      (url) => url.pathname.startsWith(`/plex/library/parts/${id}/`),
+      (url) => url.pathname.startsWith(`/library/parts/${id}/`),
       async (route) => {
         mediaRequests++;
         await mediaGate;
@@ -972,9 +1007,9 @@ test("failed direct and HLS streams fall back to artwork", async ({ page }) => {
     recentCards(page).filter({ hasText: "Third Shore" }),
   ).toBeVisible();
   await page.route(
-    (url) => url.pathname === "/plex/library/parts/1/trailer.webm",
+    (url) => url.pathname === "/library/parts/1/trailer.webm",
     async (route) =>
-      route.fulfill({
+      fulfillRoute(route, {
         body: await readFile("tests/fixtures/preview.webm"),
         contentType: "video/webm",
       }),
@@ -1038,8 +1073,11 @@ test("diagnostics distinguish a failed metadata request from a missing trailer",
   page,
 }) => {
   await mockPlex(page, { trailer: "missing" });
-  await page.route("**/plex/library/metadata/2?*", (route) =>
-    route.fulfill({ status: 503, body: "private-response-fixture-token" }),
+  await page.route("http://127.0.0.1:32401/library/metadata/2?*", (route) =>
+    fulfillRoute(route, {
+      status: 503,
+      body: "private-response-fixture-token",
+    }),
   );
   await connect(page);
   await page.getByRole("button", { name: "Connection settings" }).click();
@@ -1175,14 +1213,17 @@ test("cancelling diagnostics stops the sample and ignores a late metadata respon
   const completed = new Promise<void>((resolve) => {
     handled = resolve;
   });
-  await page.route("**/plex/library/metadata/1?*", async (route) => {
-    started();
-    await pending;
-    await route
-      .fulfill({ json: { MediaContainer: { Metadata: [] } } })
-      .catch(() => {});
-    handled();
-  });
+  await page.route(
+    "http://127.0.0.1:32401/library/metadata/1?*",
+    async (route) => {
+      started();
+      await pending;
+      await route
+        .fulfill({ json: { MediaContainer: { Metadata: [] } } })
+        .catch(() => {});
+      handled();
+    },
+  );
   await page.getByRole("button", { name: "Inspect sample metadata" }).click();
   await requested;
   await expect(
@@ -1202,7 +1243,15 @@ test("invalid tokens are recoverable and disconnect clears session storage", asy
   page,
 }) => {
   await mockPlex(page, { status: 401 });
-  await connect(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    sessionStorage.setItem("trafirdis.token", "synthetic-expired-token");
+    sessionStorage.setItem(
+      "trafirdis.server",
+      JSON.stringify({ base: "http://127.0.0.1:32401" }),
+    );
+  });
+  await page.reload();
   await expect(page.getByRole("alert")).toContainText(
     "Plex rejected the token",
   );
@@ -1451,17 +1500,19 @@ for (const width of [1440, 390]) {
       "A fictional traveler explores distant worlds and returns to tell a story about friendship and discovery. ".repeat(
         25,
       );
-    await page.route("**/plex/library/sections/1/all?*", (route) =>
-      route.fulfill({
-        json: {
-          MediaContainer: {
-            totalSize: films.length,
-            Metadata: films.map((film, index) =>
-              index === 1 ? { ...film, title, summary } : film,
-            ),
+    await page.route(
+      "http://127.0.0.1:32401/library/sections/1/all?*",
+      (route) =>
+        fulfillRoute(route, {
+          json: {
+            MediaContainer: {
+              totalSize: films.length,
+              Metadata: films.map((film, index) =>
+                index === 1 ? { ...film, title, summary } : film,
+              ),
+            },
           },
-        },
-      }),
+        }),
     );
     await connect(page);
     await recentCards(page).nth(1).click();
@@ -1535,8 +1586,8 @@ test("Recently Added caps posters and details navigation at the latest 25 films"
   page,
 }) => {
   await mockPlex(page, { trailer: "missing" });
-  await page.route("**/plex/library/sections/1/all?*", (route) =>
-    route.fulfill({
+  await page.route("http://127.0.0.1:32401/library/sections/1/all?*", (route) =>
+    fulfillRoute(route, {
       json: {
         MediaContainer: {
           totalSize: 40,
@@ -1617,33 +1668,35 @@ for (const width of [1440, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     await mockPlex(page, { trailer: "missing" });
-    await page.route("**/plex/library/sections/1/all?*", (route) =>
-      route.fulfill({
-        json: {
-          MediaContainer: {
-            totalSize: films.length,
-            Metadata: films.map((film) => ({
-              ...film,
-              art: `/library/metadata/${film.ratingKey}/art/fixture`,
-              thumb: `/library/metadata/${film.ratingKey}/thumb/fixture`,
-            })),
+    await page.route(
+      "http://127.0.0.1:32401/library/sections/1/all?*",
+      (route) =>
+        fulfillRoute(route, {
+          json: {
+            MediaContainer: {
+              totalSize: films.length,
+              Metadata: films.map((film) => ({
+                ...film,
+                art: `/library/metadata/${film.ratingKey}/art/fixture`,
+                thumb: `/library/metadata/${film.ratingKey}/thumb/fixture`,
+              })),
+            },
           },
-        },
-      }),
+        }),
     );
     let releaseSecond!: () => void;
     const secondGate = new Promise<void>((resolve) => {
       releaseSecond = resolve;
     });
     let secondPending = false;
-    await page.route("**/plex/photo/**", async (route) => {
+    await page.route("http://127.0.0.1:32401/photo/**", async (route) => {
       const source = new URL(route.request().url()).searchParams.get("url")!;
       const id = source.split("/")[3];
       if (id === "2") {
         secondPending = true;
         await secondGate;
       }
-      await route.fulfill({
+      await fulfillRoute(route, {
         contentType: "image/svg+xml",
         body: `<svg xmlns="http://www.w3.org/2000/svg" width="${100 + Number(id)}" height="100"><rect width="100%" height="100%" fill="${id === "1" ? "red" : id === "2" ? "blue" : "green"}"/></svg>`,
       });
@@ -2160,7 +2213,7 @@ for (const engine of ["native", "mse"] as const) {
       (url) => /\.(m3u8|ts)$/.test(url.pathname),
       async (route) => {
         if (rejectNewMedia)
-          return route.fulfill({
+          return fulfillRoute(route, {
             status: 503,
             body: "A warm restart must use its existing buffer",
           });

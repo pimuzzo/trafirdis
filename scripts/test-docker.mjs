@@ -51,8 +51,6 @@ function startApp(name, diagnostics = "false") {
     "--security-opt",
     "no-new-privileges:true",
     "--env",
-    "PLEX_SERVER_URL=http://plex-fixture:32400",
-    "--env",
     `TRAFIRDIS_DIAGNOSTICS=${diagnostics}`,
     image,
   ]);
@@ -118,6 +116,8 @@ try {
     network,
     "--network-alias",
     "plex-fixture",
+    "--publish",
+    "127.0.0.1::32400",
     "--mount",
     `type=bind,src=${resolve("tests/fixtures")},dst=/fixtures,readonly`,
     "node:22-alpine",
@@ -126,6 +126,8 @@ try {
     "-e",
     readFileSync("tests/docker/plex-fixture.mjs", "utf8"),
   ]);
+  const plexOrigin = `http://${docker(["port", fixture, "32400/tcp"]).stdout.trim()}`;
+  await ready(`${plexOrigin}/identity`);
   const base = startApp(app);
   await ready(`${base}/healthz`);
   assert.equal(docker(["exec", app, "id", "-u"]).stdout.trim(), "101");
@@ -148,7 +150,10 @@ try {
   );
   const config = await fetch(`${base}/runtime-config.js`);
   assert.match(config.headers.get("cache-control"), /no-store/);
-  assert.match(await config.text(), /http:\/\/plex-fixture:32400/);
+  assert.equal(
+    await config.text(),
+    'window.__TRAFIRDIS_CONFIG__ = {"diagnostics":false};\n',
+  );
   assert.equal((await fetch(`${base}/sample/poster-0.svg`)).status, 200);
   assert.equal((await fetch(`${base}/.env.local`)).status, 404);
   assert.equal((await fetch(`${base}/assets/missing.js`)).status, 404);
@@ -156,81 +161,9 @@ try {
     await (await fetch(`${base}/some/client/route`)).text(),
     /<title>Trafirdis/,
   );
-  const token = "synthetic-token-with+slash/equals=";
-  let response = await fetch(`${base}/plex/echo`, {
-    headers: { "X-Plex-Token": token, Range: "bytes=0-15" },
-  });
-  assert.deepEqual(await response.json(), {
-    path: "/echo",
-    query: "",
-    token,
-    range: "bytes=0-15",
-  });
-  response = await fetch(
-    `${base}/plex/echo?${new URLSearchParams({ "X-Plex-Token": token })}`,
-  );
-  assert.equal((await response.json()).token, token);
-  assert.equal(
-    (await fetch(`${base}/plex/echo`, { method: "POST" })).status,
-    405,
-  );
-  assert.equal(
-    (
-      await fetch(`${base}/plex/library/sections`, {
-        headers: { "X-Plex-Token": "invalid" },
-      })
-    ).status,
-    401,
-  );
-  for (const kind of ["local", "absolute", "relative"]) {
-    const redirect = await fetch(`${base}/plex/redirect-${kind}`, {
-      redirect: "manual",
-    });
-    assert.equal(redirect.status, 302);
-    const target = new URL(
-      redirect.headers.get("location"),
-      `${base}/plex/redirect-${kind}`,
-    );
-    assert.equal(target.origin, base);
-    assert.equal(target.pathname, "/plex/echo");
-    assert.equal((await fetch(target)).status, 200);
-  }
-  for (const kind of ["local", "absolute", "relative", "bare", "chain"]) {
-    const redirect = await fetch(
-      `${base}/plex/redirect-${kind}?${new URLSearchParams({ "X-Plex-Token": token })}`,
-    );
-    assert.equal(redirect.status, 200, kind);
-    const echoed = await redirect.json();
-    assert.equal(echoed.token, token, kind);
-    assert.equal(
-      new URLSearchParams(echoed.query).getAll("X-Plex-Token").length,
-      1,
-      kind,
-    );
-  }
-  for (const kind of ["external", "protocol-relative", "backslash"]) {
-    const redirect = await fetch(
-      `${base}/plex/redirect-${kind}?${new URLSearchParams({ "X-Plex-Token": token })}`,
-      {
-        redirect: "manual",
-      },
-    );
-    assert.equal(redirect.status, 502);
-    assert.equal(redirect.headers.get("location"), null);
-  }
-  response = await fetch(`${base}/plex/library/parts/101/trailer.webm`, {
-    headers: { Range: "bytes=0-15", "X-Plex-Token": token },
-  });
-  assert.equal(response.status, 206);
-  assert.equal((await response.arrayBuffer()).byteLength, 16);
-  assert.match(response.headers.get("content-range"), /^bytes 0-15\//);
-  const stream = await fetch(`${base}/plex/slow`);
-  const reader = stream.body.getReader();
-  const first = await reader.read();
-  assert.equal(new TextDecoder().decode(first.value), "first");
-  await reader.cancel();
+  assert.equal((await fetch(`${base}/plex/identity`)).status, 404);
   console.log(
-    "Docker proxy: health, runtime configuration, authentication, redirects, ranges, streaming and non-root/read-only runtime passed.",
+    "Docker static hosting: health, runtime diagnostics, assets and non-root/read-only runtime passed; no media proxy is available.",
   );
 
   browser = await chromium.launch({
@@ -252,8 +185,8 @@ try {
       diagnosticChunks.push(request.url());
   });
   await page.goto(base);
-  await page.getByText("http://plex-fixture:32400", { exact: true }).waitFor();
   await page.getByText("Use a Plex token instead", { exact: true }).click();
+  await page.getByLabel("Plex server address").fill(plexOrigin);
   await page
     .getByLabel("Plex authentication token")
     .fill("docker-browser-fixture-token");
@@ -304,6 +237,7 @@ try {
     if (/\/(decision|start\.m3u8)$|\.ts$/.test(url.pathname))
       hlsRequests.push(url.pathname);
   });
+  await page.getByLabel("Plex server address").fill(plexOrigin);
   await page
     .getByLabel("Plex authentication token")
     .fill("docker-browser-hls-token");
@@ -428,7 +362,7 @@ try {
   assert.equal(
     hlsRequests.length,
     mediaCount,
-    "Warm returns must not rebuild media through the production proxy.",
+    "Warm returns must not rebuild media on the selected server.",
   );
   // Exercise hosted authorization through the actual production SPA callback.
   await page.getByRole("button", { name: "Connection settings" }).click();
@@ -442,7 +376,7 @@ try {
   };
   const loginRequests = [];
   page.on("request", (request) => {
-    if (new URL(request.url()).origin === base)
+    if (new URL(request.url()).origin === plexOrigin)
       loginRequests.push({
         url: request.url(),
         token: request.headers()["x-plex-token"],
@@ -466,6 +400,7 @@ try {
                   clientIdentifier: "docker-fixture",
                   provides: "server",
                   accessToken: "docker-server-token",
+                  connections: [{ uri: plexOrigin, local: true }],
                 },
               ];
       await route.fulfill({ headers: cloudHeaders, json: value });
@@ -522,7 +457,7 @@ try {
   );
   diagnosticPage.on("request", (request) => {
     if (
-      /\/plex\/(library\/parts\/|video\/:\/transcode\/universal\/start)/.test(
+      /\/(library\/parts\/|video\/:\/transcode\/universal\/start)/.test(
         new URL(request.url()).pathname,
       )
     )
@@ -532,6 +467,7 @@ try {
   await diagnosticPage
     .getByText("Use a Plex token instead", { exact: true })
     .click();
+  await diagnosticPage.getByLabel("Plex server address").fill(plexOrigin);
   await diagnosticPage
     .getByLabel("Plex authentication token")
     .fill("docker-diagnostics-token");
@@ -604,31 +540,9 @@ try {
   await browser.close();
   browser = undefined;
   console.log(
-    "Docker browser: real catalog proxy, runtime server label, actual native and HLS trailer decoding, preview cleanup, hosted sign-in and production-only UI passed.",
+    "Docker browser: direct cross-origin catalog, native and HLS decoding, preview cleanup, hosted sign-in and production-only UI passed.",
   );
 
-  for (const target of [
-    "https://user:synthetic-secret@example.com",
-    "http://example.com/path",
-    "http://example.com?token=synthetic-secret",
-    "http://example.com\nserver {}",
-  ]) {
-    const invalid = docker(
-      [
-        "run",
-        "--rm",
-        "--read-only",
-        "--tmpfs",
-        "/tmp:rw,noexec,nosuid,size=32m,mode=1777",
-        "--env",
-        `PLEX_SERVER_URL=${target}`,
-        image,
-      ],
-      true,
-    );
-    assert.equal(invalid.status, 1);
-    assert.doesNotMatch(invalid.stdout + invalid.stderr, /synthetic-secret/);
-  }
   const badDiagnostics = docker(
     [
       "run",
@@ -655,9 +569,7 @@ try {
   docker(["stop", fixture]);
   assert.equal((await fetch(`${base}/healthz`)).status, 200);
   assert.equal((await fetch(base)).status, 200);
-  assert.ok(
-    [502, 504].includes((await fetch(`${base}/plex/library/sections`)).status),
-  );
+  assert.equal((await fetch(`${base}/plex/library/sections`)).status, 404);
   for (const name of [app, diagnosticApp]) {
     const logs = docker(["logs", name]);
     assert.doesNotMatch(
@@ -666,7 +578,7 @@ try {
     );
   }
   console.log(
-    "Docker validation: invalid origins fail safely; offline Plex does not take down the SPA; request tokens stay out of container logs.",
+    "Docker validation: diagnostics config fails safely; offline Plex does not take down the SPA; Plex credentials do not reach application hosting or container logs.",
   );
 } catch (error) {
   const logs = docker(["logs", app], true);

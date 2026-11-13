@@ -1,5 +1,7 @@
 # Incremental implementation record
 
+Earlier sections record past deliveries. The latest server-discovery follow-up describes the current architecture; references to a fixed Plex proxy in older entries are historical.
+
 The repository was inspected first and contained only Git metadata. The entire supplied PRD was read before implementation. Each phase ended with a working TypeScript/Vite application; the final implementation includes all five phases.
 
 The phase table records initial delivery. Current maintainer acceptance and remaining compatibility checks are recorded at the end of this document; earlier validation boundaries are not claims that subsequently confirmed features remain unverified.
@@ -30,7 +32,7 @@ Added hosted **Sign in with Plex** as the primary connection action after the us
 
 ## Trailer reliability follow-up
 
-After the MVP merge, added runtime opt-in diagnostics for Docker and production Vite builds. This deliberately extends the PRD's development-only view; production keeps the panel disabled and its module unloaded unless explicitly enabled. The app remains a frontend SPA with the existing fixed-origin proxy.
+After the MVP merge, added runtime opt-in diagnostics for Docker and production Vite builds. This deliberately extends the PRD's development-only view; production keeps the panel disabled and its module unloaded unless explicitly enabled. At that stage, the frontend SPA used a fixed-origin proxy, since removed by the server-discovery follow-up below.
 
 Diagnostics can search the loaded library, inspect at most eight fresh metadata records sequentially, cancel pending work, and test a title outside catalog filters. Missing metadata, request failures, unavailable resources, autoplay denial and playback failures remain distinct. Rechecks and new preview attempts clear stale success; pausing preserves genuine observations. Downloaded reports use an explicit allowlist of numeric IDs, states and fixed error codes, excluding titles, credentials, addresses and raw error text. No additional provider, database, dependency or server write was introduced.
 
@@ -145,3 +147,15 @@ The first-frame watchdog now distinguishes healthy playback awaiting presentatio
 Unit tests cover startup and buffering resume with withheld frames, restoring the visible deadline and a real stall while hidden. Browser tests combine a simulated hidden state with deliberately delayed frame callbacks while real synthetic video continues past 12 seconds, then restore frame delivery without another stream request. This reproduces the missing-frame condition; it does not claim to validate native browser/OS tab suspension.
 
 GitHub browser jobs upload reports only on failure, and upload itself is best effort. This addresses artifact-quota failures after otherwise passing tests while keeping test failures blocking and retaining logs in Actions.
+
+## Account server discovery and static hosting — 2026-11-13
+
+Hosted sign-in now lists account-authorized owned/shared servers instead of requiring a configured deployment target. A single resource or remembered accessible choice connects automatically; failures leave a retryable chooser. Change server in settings clears that preference. Resource connections are validated and tried in local/remote/relay order, preferring HTTPS within each group, with HTTP alternatives only on HTTP app origins. An authenticated server-root request verifies access and the selected resource identity before session storage, with a ten-second deadline per candidate. Public identity probing was removed after real PMS CORS behavior prevented the browser from reading that unauthenticated endpoint. The account token is discarded after lookup; only the verified selected token/connection use session storage, while the non-secret preferred server ID uses local storage.
+
+The Plex client now supports a selected direct origin for API, artwork, preview negotiation, native playback, HLS and cleanup. A stricter CSP is installed before authenticated media renders; disconnect reloads to reset that policy. Docker and Vite serve only application files. Deployment server-address configuration and the media proxy have been removed completely. Existing token-only or proxy-based sessions require sign-in again; users select their server after login, or enter its address in the manual-token form. Disconnect lets unmount cleanup run before reloading; scoped preview-stop requests use fetch keepalive so navigation can finish cleanup. This remains best-effort PMS session expiry. No application backend, dynamic proxy, external media provider or dependency was added.
+
+The distributable build is exercised on a static HTTPS fixture with a separate CORS-enabled HTTPS Plex fixture, including artwork, native video, native HLS, MSE HLS, refresh restoration, mixed-content rejection and external-media protection. Temporary fixture certificate errors are explicitly ignored; real certificate trust, Plex cloud/PMS CORS, browser local-network permissions, remote/relay access and the maintainer's real trailers still require validation. This supersedes earlier single-target deployment decisions and does not claim live Plex or public-site acceptance.
+
+HTTP deployments can additionally try a private IPv4 LAN address and its exact port from the selected Plex resource's connection metadata when it is explicitly local, not a relay, and the server explicitly reports `httpsRequired: false`. No address is extracted from DNS names, no port is guessed and no HTTP fallback is added on HTTPS app origins or when secure transport is required/unknown. This handles unreachable `plex.direct` DNS on HTTP LAN deployments without a configured server URL. HTTP traffic is unencrypted; hosted HTTPS sites still require working HTTPS Plex connections. Tests cover DNS failure with a successful LAN fallback, stalled probes, cancellation and the secure-transport guards.
+
+On 2026-11-14, the maintainer confirmed that the complete server-discovery/direct-connection flow works on their deployment after the authenticated-root and advertised-LAN fallback fixes. This is live acceptance for that setup, not exhaustive validation of public HTTPS hosting, all browser/network combinations or all trailer providers.

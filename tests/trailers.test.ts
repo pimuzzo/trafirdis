@@ -73,11 +73,15 @@ describe("trailer discovery and resolution", () => {
     });
     expect(d.metadataFound).toBe(true);
     expect(
-      new TrailerService(new PlexClient("x")).attempts(d, () => ""),
+      new TrailerService(
+        new PlexClient("x", "http://127.0.0.1:32401"),
+      ).attempts(d, () => ""),
     ).toEqual([]);
   });
   it("tries a native part before Plex HLS and uses the extra key for streaming", () => {
-    const service = new TrailerService(new PlexClient("x"));
+    const service = new TrailerService(
+      new PlexClient("x", "http://127.0.0.1:32401"),
+    );
     const attempts = service.attempts(discoverTrailers(parent), (mime) =>
       mime.startsWith("video/mp4") ? "probably" : "",
     );
@@ -88,7 +92,9 @@ describe("trailer discovery and resolution", () => {
     expect(attempts[1].path).not.toContain("Token");
   });
   it("routes indirect Plex assets through the server and skips unsupported codecs", () => {
-    const service = new TrailerService(new PlexClient("x"));
+    const service = new TrailerService(
+      new PlexClient("x", "http://127.0.0.1:32401"),
+    );
     const d = discoverTrailers({
       Extras: {
         Metadata: [
@@ -127,15 +133,14 @@ describe("trailer discovery and resolution", () => {
       },
     });
     expect(
-      new TrailerService(new PlexClient("secret")).attempts(
-        d,
-        () => "probably",
-      ),
+      new TrailerService(
+        new PlexClient("secret", "http://127.0.0.1:32401"),
+      ).attempts(d, () => "probably"),
     ).toEqual([]);
   });
   it("caches only completed discovery, expires it, and bounds cache size", async () => {
     let now = 0;
-    const client = new PlexClient("x");
+    const client = new PlexClient("x", "http://127.0.0.1:32401");
     const details = vi.spyOn(client, "details").mockResolvedValue(parent);
     const service = new TrailerService(client, () => now);
     await service.discover("1");
@@ -149,7 +154,7 @@ describe("trailer discovery and resolution", () => {
     expect(details).toHaveBeenCalledTimes(64);
   });
   it("does not cache failed discovery or cancelled responses", async () => {
-    const client = new PlexClient("x");
+    const client = new PlexClient("x", "http://127.0.0.1:32401");
     const details = vi
       .spyOn(client, "details")
       .mockRejectedValueOnce(new Error("network"))
@@ -170,7 +175,9 @@ describe("trailer discovery and resolution", () => {
 
 describe("diagnostic observations", () => {
   it("retains measured playback results when a preview is paused for diagnostics", () => {
-    const service = new TrailerService(new PlexClient("x"));
+    const service = new TrailerService(
+      new PlexClient("x", "http://127.0.0.1:32401"),
+    );
     service.report({
       movieId: "1",
       phase: "playing",

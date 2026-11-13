@@ -67,13 +67,9 @@ Avoid unnecessary frameworks, complex state management, and large UI component l
 
 The application should be a client-side Single Page Application (SPA).
 
-During local development, Vite should proxy requests to Plex Media Server to avoid browser CORS restrictions.
+After Plex sign-in, discover owned and shared servers from the account resource list. Connect automatically when one server is available or a remembered choice remains accessible; otherwise show a server chooser. Verify the selected server identity and access before persisting the session. Remember only the public server ID across sessions, and allow changing it from Connection settings.
 
-The initial Plex server address is:
-
-`http://192.168.178.46:32400`
-
-This address must be configurable and must not be hardcoded throughout the application.
+The browser should connect directly to the selected server, allowing the complete SPA to be served as static files over HTTPS without per-user environment configuration. HTTPS hosting requires reachable HTTPS Plex connections and compatible browser networking/CORS. Vite and Nginx serve application files only; no Plex proxy or deployment server-address setting is supported.
 
 The Plex authentication token must be configurable and must never be committed to source control.
 
@@ -81,7 +77,7 @@ Hosted Plex sign-in is the primary connection flow, with manual-token entry as a
 
 The application must not expose the Plex token to third-party services.
 
-Local development and production preview use Vite's fixed-origin Plex proxy. Optional Docker packaging serves the SPA through Nginx with the same fixed-origin proxy boundary.
+Local development, production preview and Docker use direct browser-to-Plex connections. Docker packages a static Nginx web server.
 
 No custom application backend is required for the MVP.
 
@@ -223,7 +219,7 @@ This follow-up applies to the accepted hero and details preview surfaces. It doe
 
 **Requirements:**
 
-- Before each Plex HLS attempt, request and validate a fresh playback decision through the configured Plex proxy. Use the extra's key, never the full movie, and the same media indices, stream settings, client identity and playback session as the corresponding start.
+- Before each Plex HLS attempt, request and validate a fresh playback decision on the selected Plex server. Use the extra's key, never the full movie, and the same media indices, stream settings, client identity and playback session as the corresponding start.
 - HTTP 200 alone is not approval: require a recognized conversion-OK decision. A denied, malformed, unsupported or failed decision must not start a stream or bypass Plex restrictions.
 - Negotiate again on popup reopen, hero visibility return, pause/resume, replay and candidate fallback. Availability metadata may remain cached; playback decisions must not be cached or shared across attempts.
 - Cancelling or timing out negotiation must abort the request and prevent late responses from attaching a source. Keep one active player and best-effort cleanup scoped to its session.
