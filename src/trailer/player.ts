@@ -64,6 +64,7 @@ export async function playAttempt(
     const startup = new AbortController();
     let awaitingGesture = false;
     let awaitingFrame = false;
+    let mediaPlaying = false;
     let frameCallback: number | undefined;
     let frameGeneration = 0;
     let timer: ReturnType<typeof setTimeout>;
@@ -88,6 +89,7 @@ export async function playAttempt(
       video.removeEventListener("error", error);
       video.removeEventListener("ended", ended);
       video.removeEventListener("waiting", waiting);
+      document.removeEventListener("visibilitychange", presentationVisibility);
       hls?.destroy();
       releaseVideo(video);
       if (attempt.session) void client.stopPreviewSession(attempt.session);
@@ -103,6 +105,8 @@ export async function playAttempt(
       finish(new DOMException("Preview cancelled", "AbortError"));
     const armTimeout = () => {
       clearTimeout(timer);
+      // Hidden tabs can keep playing while rendering/frame callbacks are suspended.
+      if (awaitingFrame && mediaPlaying && document.hidden) return;
       timer = setTimeout(
         () =>
           finish(
@@ -114,11 +118,21 @@ export async function playAttempt(
         12000,
       );
     };
+    const presentationVisibility = () => {
+      if (
+        !settled &&
+        !suspended &&
+        !awaitingGesture &&
+        awaitingFrame &&
+        mediaPlaying
+      )
+        armTimeout();
+    };
     const metadata = () => {
       if (!settled) onResolved();
     };
     const presented = () => {
-      if (settled || suspended || !awaitingFrame) return;
+      if (settled || suspended || !awaitingFrame || !mediaPlaying) return;
       awaitingFrame = false;
       clearTimeout(timer);
       onPlaying();
@@ -140,7 +154,9 @@ export async function playAttempt(
       awaitingGesture = false;
       if (settled) return;
       cancelFrame();
+      mediaPlaying = true;
       awaitingFrame = true;
+      armTimeout();
       if (typeof video.requestVideoFrameCallback === "function") {
         const current = frameGeneration;
         frameCallback = video.requestVideoFrameCallback(() => {
@@ -151,11 +167,13 @@ export async function playAttempt(
       } else fallbackFrame();
     };
     const waiting = () => {
+      mediaPlaying = false;
       if (!settled && !awaitingGesture && !suspended) armTimeout();
     };
     const requested = () => {
       if (settled || suspended) return;
       awaitingGesture = false;
+      mediaPlaying = false;
       armTimeout();
     };
     const error = () => finish(playbackError(video));
@@ -185,6 +203,7 @@ export async function playAttempt(
     video.addEventListener("error", error);
     video.addEventListener("ended", ended);
     video.addEventListener("waiting", waiting);
+    document.addEventListener("visibilitychange", presentationVisibility);
     signal.addEventListener("abort", abort, { once: true });
     video.loop = false;
     video.playsInline = true;
@@ -240,6 +259,7 @@ export async function playAttempt(
       onControl?.({
         suspend: () => {
           suspended = true;
+          mediaPlaying = false;
           cancelFrame();
           clearTimeout(timer);
           video.pause();
@@ -251,6 +271,7 @@ export async function playAttempt(
           if (settled || signal.aborted) return false;
           cancelFrame();
           suspended = false;
+          mediaPlaying = false;
           video.currentTime = 0;
           hls?.startLoad(0);
           armTimeout();

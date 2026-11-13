@@ -255,6 +255,7 @@ Acceptance: simulate slow initial segments, play A and B, then deny new media re
 The maintainer confirmed retained buffers work on the real deployment and requested continued playback when switching browser tabs, for both hero and details.
 
 - Browser document visibility changes must not pause/mute/restart an active preview, clear its retained buffers or recreate its Plex session. Playback position and the chosen audio state continue, and trailers still end normally.
+- Once the media reports playback, a missing video-frame callback in a hidden document must not be treated as a playback stall: rendering may be suspended there. Keep visual readiness tied to frame confirmation, suspend only the presentation deadline while hidden, and restore it on return if necessary. Real buffering/network stalls must still time out while hidden.
 - Keep viewport-based suspension for scrolling out of the preview, manual pause, settings/disconnect cleanup, one playing surface and existing mute rules. A manually paused preview must not auto-resume on a visibility event.
 - Inactive retained entries still expire by elapsed time, including when background timers are throttled. This does not extend the 30-second cache lifetime.
 - Do not add background keepalive workarounds, dependencies or Plex endpoints. Browser/OS tab suspension remains outside the application guarantee.

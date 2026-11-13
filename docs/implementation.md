@@ -137,3 +137,11 @@ Dialog height uses dynamic viewport units with a viewport-height fallback, allow
 Discover/Unwatched is restored on refresh from the browser-wide `trafirdis.catalog-view` local-storage entry. It stores only `discover` or `unwatched`, derived from the existing watch-status filter. Search and other filters remain transient; actions that already clear all filters also return the remembered view to Discover. The existing server-scoped library preference is unchanged. Invalid or missing view preferences use Discover, and blocked storage preserves in-memory switching. No credentials or movie data are added to persistent storage. The preference survives disconnect; clearing site data removes it.
 
 Unit checks cover restoration, transient filter reset, invalid values and blocked storage. Browser checks verify that both library and view survive reload, the correct watched films/categories are shown, and selecting Discover persists the return to the full catalog.
+
+## Hidden-frame readiness and CI reports — 2026-11-13
+
+The first-frame watchdog now distinguishes healthy playback awaiting presentation from a real media stall. After a playing event, a hidden document can defer its frame callback without timing out or releasing the stream. Visibility return restores the presentation deadline if the frame is still missing. Waiting/network stalls keep their timeout in either visibility state. Frame-confirmed display, audio, session identity and cleanup behavior are preserved.
+
+Unit tests cover startup and buffering resume with withheld frames, restoring the visible deadline and a real stall while hidden. Browser tests combine a simulated hidden state with deliberately delayed frame callbacks while real synthetic video continues past 12 seconds, then restore frame delivery without another stream request. This reproduces the missing-frame condition; it does not claim to validate native browser/OS tab suspension.
+
+GitHub browser jobs upload reports only on failure, and upload itself is best effort. This addresses artifact-quota failures after otherwise passing tests while keeping test failures blocking and retaining logs in Actions.

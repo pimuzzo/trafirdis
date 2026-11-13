@@ -692,6 +692,83 @@ test("plays Plex HLS through the lazy fallback in Chromium", async ({
     .toBe(true);
 });
 for (const surface of ["hero", "details"] as const) {
+  test(`${surface} keeps media alive while hidden-frame callbacks are delayed`, async ({
+    page,
+  }) => {
+    test.setTimeout(45000);
+    await page.addInitScript(() => {
+      let hidden = true;
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => hidden,
+      });
+      const requestFrame = HTMLVideoElement.prototype.requestVideoFrameCallback;
+      const cancelFrame = HTMLVideoElement.prototype.cancelVideoFrameCallback;
+      const pending = new Map<number, () => void>();
+      HTMLVideoElement.prototype.requestVideoFrameCallback = function (
+        callback,
+      ) {
+        const id = requestFrame.call(this, (now, metadata) => {
+          this.dataset.framePending = "true";
+          if (hidden) pending.set(id, () => callback(now, metadata));
+          else callback(now, metadata);
+        });
+        return id;
+      };
+      HTMLVideoElement.prototype.cancelVideoFrameCallback = function (id) {
+        pending.delete(id);
+        cancelFrame.call(this, id);
+      };
+      // Loop only the synthetic clip so it outlasts the startup deadline.
+      document.addEventListener(
+        "loadedmetadata",
+        (event) => {
+          if (event.target instanceof HTMLVideoElement)
+            event.target.loop = true;
+        },
+        true,
+      );
+      document.addEventListener("test:restore-presentation", () => {
+        hidden = false;
+        document.dispatchEvent(new Event("visibilitychange"));
+        for (const callback of pending.values()) callback();
+        pending.clear();
+      });
+    });
+    const requests = await mockPlex(page, { trailer: "direct" });
+    await connect(page);
+    if (surface === "details") await recentCards(page).nth(1).click();
+    const host = page.locator(surface === "hero" ? ".hero" : ".details-dialog");
+    const video = host.locator("video");
+    await expect(video).toHaveAttribute("data-frame-pending", "true");
+    const source = await video.getAttribute("src");
+    await page.waitForTimeout(13000);
+    await expect(video).toHaveAttribute("src", source!);
+    await expect(host.locator("[data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "resolved",
+    );
+    expect(
+      await video.evaluate(
+        (element) => !element.paused && element.currentTime > 0,
+      ),
+    ).toBe(true);
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event("test:restore-presentation")),
+    );
+    await expect(host.locator("[data-preview-phase]")).toHaveAttribute(
+      "data-preview-phase",
+      "playing",
+    );
+    await expect(video).toHaveAttribute("src", source!);
+    const id = surface === "hero" ? "1" : "2";
+    expect(
+      requests.filter((request) =>
+        request.path.startsWith(`/library/parts/${id}/`),
+      ),
+    ).toHaveLength(1);
+  });
+
   test(`${surface} keeps artwork and loading status until a video frame is presented`, async ({
     page,
   }) => {
