@@ -3,6 +3,7 @@
   "description": "A trailer-first discovery experience for Plex.",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -12,8 +13,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check": "npm run test && npm run build",
-    "format": "prettier --write src tests vite.config.ts playwright.config.ts package.json tsconfig.json index.html README.md docs/plex-api.md docs/implementation.md scripts tests/docker public/runtime-config.js compose.yaml .github AGENTS.md docs/COMPLIANCE.md public/privacy.html",
-    "format:check": "prettier --check src tests vite.config.ts playwright.config.ts package.json tsconfig.json index.html README.md docs/plex-api.md docs/implementation.md scripts tests/docker public/runtime-config.js compose.yaml .github AGENTS.md docs/COMPLIANCE.md public/privacy.html",
+    "format": "prettier --write src tests vite.config.ts playwright.config.ts package.json tsconfig.json index.html README.md docs scripts tests/docker public/runtime-config.js compose.yaml .github AGENTS.md public/privacy.html",
+    "format:check": "prettier --check src tests vite.config.ts playwright.config.ts package.json tsconfig.json index.html README.md docs scripts tests/docker public/runtime-config.js compose.yaml .github AGENTS.md public/privacy.html",
     "test:docker": "node scripts/test-docker.mjs"
   },
   "dependencies": {

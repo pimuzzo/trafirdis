@@ -51,7 +51,7 @@ New preview players start muted. A mounted hero or open details popup retains it
 
 Unit tests use explicit synthetic Plex-shaped JSON, including both local parts and indirect extra keys. Browser tests use synthetic WebM/HLS media and actually decode them in Chromium. Direct-connection tests use cross-origin HTTP(S) fixtures. These establish application behavior, not the behavior of the user's server or licensed extras provider.
 
-The configured private Plex IP was inaccessible through the managed environment's egress policy, and no Plex token was configured. Therefore the following remain open: actual extras JSON shape, successful server resolution of provider keys, actual codec/transcoding decisions, native Safari HLS behavior, session stop compatibility, and navigation in the user's Plex Web version. The opt-in diagnostic view and the README's acceptance procedure make each of these testable locally without modifying the library.
+The configured private Plex IP was inaccessible through the managed environment's egress policy, and no Plex token was configured. Therefore the following remain open: actual extras JSON shape, successful server resolution of provider keys, actual codec/transcoding decisions, native Safari HLS behavior, session stop compatibility, and navigation in the user's Plex Web version. The opt-in diagnostic view and the [user guide's acceptance procedure](usage.md#trailer-diagnostics-and-real-server-validation) make each of these testable locally without modifying the library.
 
 ## Hosted Plex sign-in
 

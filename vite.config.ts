@@ -41,6 +41,18 @@ export default defineConfig(({ mode, command }) => {
             ),
         },
       },
+      {
+        name: "trafirdis-license-files",
+        apply: "build",
+        generateBundle() {
+          for (const fileName of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES"])
+            this.emitFile({
+              type: "asset",
+              fileName,
+              source: readFileSync(new URL(`./${fileName}`, import.meta.url)),
+            });
+        },
+      },
       react(),
     ],
     define: { __TRAFIRDIS_DIAGNOSTICS__: diagnostics === "true" },

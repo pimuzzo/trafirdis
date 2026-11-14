@@ -148,6 +148,11 @@ try {
     await (await fetch(`${base}/NOTICE`)).text(),
     /Copyright © 2026 Trafirdis contributors/,
   );
+  for (const file of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES"]) {
+    const response = await fetch(`${base}/${file}`);
+    assert.equal(response.status, 200, `${file} must ship with the image`);
+    assert.equal(await response.text(), readFileSync(file, "utf8"));
+  }
   const expectedSecurityHeaders = Object.fromEntries(
     readFileSync("public/_headers", "utf8")
       .split("\n")
