@@ -69,8 +69,24 @@ test.beforeAll(async () => {
     key: readFileSync(resolve(directory, "key.pem")),
     cert: readFileSync(resolve(directory, "cert.pem")),
   };
+  const securityHeaders = Object.fromEntries(
+    readFileSync("dist/_headers", "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith("  "))
+      .map((line) => {
+        const split = line.indexOf(":");
+        return [line.slice(0, split).trim(), line.slice(split + 1).trim()];
+      }),
+  );
   app = createServer(tls, (req, res) => {
     const url = new URL(req.url!, "https://fixture.invalid");
+    if (url.pathname === "/framing-fixture") {
+      res.setHeader("Content-Type", "text/html");
+      res.end('<!doctype html><iframe src="/"></iframe>');
+      return;
+    }
+    for (const [name, value] of Object.entries(securityHeaders))
+      res.setHeader(name, value);
     if (req.headers["x-plex-token"] || url.searchParams.has("X-Plex-Token"))
       appCredentials.push(url.pathname);
     const path = resolve(
@@ -464,4 +480,66 @@ test("hosted sign-in succeeds when PMS public identity is unreadable because of 
       .filter((request) => request.path === "/")
       .every((request) => request.token === "synthetic-static-token"),
   ).toBe(true);
+});
+
+test("production policy blocks inline and external scripts without preventing application startup", async ({
+  page,
+}) => {
+  let external = 0;
+  await page.route("https://outside.example/**", (route) => {
+    external++;
+    return route.fulfill({
+      body: "window.injectedScript = true",
+      contentType: "application/javascript",
+    });
+  });
+  const response = await page.goto(appOrigin);
+  expect(response!.headers()["x-frame-options"]).toBe("DENY");
+  expect(response!.headers()["x-content-type-options"]).toBe("nosniff");
+  expect(response!.headers()["content-security-policy"]).toContain(
+    "script-src 'self';",
+  );
+  expect(response!.headers()["content-security-policy"]).not.toContain(
+    "'unsafe-eval'",
+  );
+  await expect(
+    page.getByRole("button", { name: "Sign in with Plex", exact: true }),
+  ).toBeVisible();
+  const injected = await page.evaluate(async () => {
+    const inline = document.createElement("script");
+    inline.textContent = "window.injectedScript = true";
+    document.body.append(inline);
+    const remote = document.createElement("script");
+    const failed = new Promise((resolve) => {
+      remote.onerror = () => resolve(true);
+      remote.onload = () => resolve(false);
+    });
+    remote.src = "https://outside.example/security-probe.js";
+    document.body.append(remote);
+    return {
+      blocked: await failed,
+      executed: Boolean(
+        (window as unknown as { injectedScript?: boolean }).injectedScript,
+      ),
+    };
+  });
+  expect(injected).toEqual({ blocked: true, executed: false });
+  expect(external).toBe(0);
+});
+
+test("production headers prevent framing the app even from the same origin", async ({
+  page,
+}) => {
+  const blocked: string[] = [];
+  page.on("console", (message) => {
+    if (message.text().includes("frame-ancestors"))
+      blocked.push(message.text());
+  });
+  await page.goto(`${appOrigin}/framing-fixture`);
+  await expect.poll(() => blocked.length).toBeGreaterThan(0);
+  await expect(
+    page
+      .frameLocator("iframe")
+      .getByRole("button", { name: "Sign in with Plex", exact: true }),
+  ).toHaveCount(0);
 });

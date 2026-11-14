@@ -16,6 +16,7 @@ FROM nginx:stable-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY --chmod=644 NOTICE /usr/share/nginx/html/NOTICE
 COPY --chmod=644 docker/nginx.conf /etc/nginx/trafirdis.conf
+COPY --chmod=644 docker/security-headers.conf /etc/nginx/trafirdis-security-headers.conf
 COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/trafirdis-entrypoint
 USER nginx
 EXPOSE 8080

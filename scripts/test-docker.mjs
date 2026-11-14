@@ -148,6 +148,35 @@ try {
     await (await fetch(`${base}/NOTICE`)).text(),
     /Copyright © 2026 Trafirdis contributors/,
   );
+  const expectedSecurityHeaders = Object.fromEntries(
+    readFileSync("public/_headers", "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith("  "))
+      .map((line) => {
+        const split = line.indexOf(":");
+        return [line.slice(0, split).trim(), line.slice(split + 1).trim()];
+      }),
+  );
+  const builtIndex = await (await fetch(base)).text();
+  const script = builtIndex.match(/src="(\/assets\/[^"]+\.js)"/)[1];
+  for (const path of [
+    "/",
+    "/privacy.html",
+    "/runtime-config.js",
+    script,
+    "/assets/missing.js",
+    "/.env.local",
+    "/healthz",
+  ]) {
+    const response = await fetch(`${base}${path}`);
+    for (const [name, value] of Object.entries(expectedSecurityHeaders))
+      assert.equal(
+        response.headers.get(name),
+        value,
+        `${name} missing or inconsistent on ${path}`,
+      );
+  }
+  assert.equal((await fetch(`${base}/_headers`)).status, 404);
   const config = await fetch(`${base}/runtime-config.js`);
   assert.match(config.headers.get("cache-control"), /no-store/);
   assert.equal(
