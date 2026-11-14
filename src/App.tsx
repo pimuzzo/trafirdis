@@ -1,42 +1,64 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PlexClient } from "./plex/client";
 import { ConnectionScreen } from "./components/ConnectionScreen";
 import Catalog from "./components/Catalog";
-function readToken() {
-  try {
-    return sessionStorage.getItem("trafirdis.token") || "";
-  } catch {
-    return "";
-  }
-}
+import {
+  clearConnection,
+  readConnection,
+  restrictConnection,
+  saveConnection,
+  type PlexConnection,
+} from "./plex/connection";
 export default function App() {
-  const [token, setToken] = useState(readToken);
+  const [connection, setConnection] = useState(() => {
+    const saved = readConnection();
+    if (saved) restrictConnection(saved.base);
+    return saved;
+  });
   const [sample, setSample] = useState(false);
+  const [reload, setReload] = useState(false);
+  // Let Catalog's unmount effects release previews before resetting the CSP.
+  useEffect(() => {
+    if (reload) window.location.reload();
+  }, [reload]);
   const queries = useQueryClient();
-  const client = useMemo(() => (token ? new PlexClient(token) : null), [token]);
+  const client = useMemo(
+    () =>
+      connection
+        ? new PlexClient(
+            connection.token,
+            connection.base,
+            undefined,
+            undefined,
+          )
+        : null,
+    [connection],
+  );
   const disconnect = () => {
-    setToken("");
+    setConnection(null);
     setSample(false);
-    try {
-      sessionStorage.removeItem("trafirdis.token");
-    } catch {
-      /* The in-memory session still disconnects. */
-    }
+    clearConnection();
     queries.clear();
+    if (connection) setReload(true);
   };
   const connect = useCallback(
-    (value: string) => {
+    (value: PlexConnection) => {
       queries.clear();
-      try {
-        sessionStorage.setItem("trafirdis.token", value);
-      } catch {
-        /* In-memory use remains available when storage is blocked. */
-      }
-      setToken(value);
+      saveConnection(value);
+      restrictConnection(value.base);
+      setConnection(value);
     },
     [queries],
   );
+  const changeServer = () => {
+    try {
+      localStorage.removeItem("trafirdis.preferred-server");
+    } catch {
+      /* Choosing a server remains available without persistent storage. */
+    }
+    disconnect();
+  };
   if (!client && !sample)
     return (
       <ConnectionScreen onConnect={connect} onSample={() => setSample(true)} />
@@ -46,6 +68,7 @@ export default function App() {
       key={sample ? "sample" : "plex"}
       client={client}
       onDisconnect={disconnect}
+      onChangeServer={changeServer}
     />
   );
 }

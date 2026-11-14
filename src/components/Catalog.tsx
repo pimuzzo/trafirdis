@@ -1,4 +1,4 @@
-import { diagnosticsEnabled, serverLabel } from "../config";
+import { diagnosticsEnabled } from "../config";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PlexClient, errorMessage } from "../plex/client";
@@ -46,9 +46,11 @@ function useIsPhone() {
 export default function Catalog({
   client,
   onDisconnect,
+  onChangeServer,
 }: {
   client: PlexClient | null;
   onDisconnect: () => void;
+  onChangeServer: () => void;
 }) {
   const sample = !client;
   const isPhone = useIsPhone();
@@ -95,7 +97,7 @@ export default function Catalog({
     enabled: !sample,
   });
   const serverKey = server.data
-    ? server.data.machineIdentifier || serverLabel
+    ? server.data.machineIdentifier || client?.base
     : undefined;
   const { libraryId, selectLibrary } = useMovieLibrary(
     serverKey,
@@ -453,16 +455,21 @@ export default function Catalog({
             <p>
               {sample
                 ? "You are browsing fictional films in the sample library."
-                : `Connected through ${serverLabel}`}
+                : `Connected to ${server.data?.name || "Plex"} through ${client?.base}`}
             </p>
             <p className="subtle">
-              The Plex server address is configured by the deployment. Tokens
-              are kept only for this browser session. Your library and watch
-              history are never changed.{" "}
+              Server access is kept only for this browser session. Use Change
+              server to sign in and choose another server. Your library and
+              watch history are never changed.{" "}
               <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
                 Privacy notice
               </a>
             </p>
+            {!sample && (
+              <button className="button secondary" onClick={onChangeServer}>
+                Change server
+              </button>
+            )}
             {Diagnostics && (
               <button
                 className="button secondary"

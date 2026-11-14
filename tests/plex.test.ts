@@ -15,10 +15,14 @@ describe("Plex integration boundary", () => {
         ],
       }),
     );
-    const c = new PlexClient("private-test-token", fetcher);
+    const c = new PlexClient(
+      "private-test-token",
+      "http://127.0.0.1:32401",
+      fetcher,
+    );
     expect(await c.libraries()).toEqual([{ id: "1", title: "Movies" }]);
     const [url, init] = fetcher.mock.calls[0];
-    expect(url).toBe("/plex/library/sections");
+    expect(url).toBe("http://127.0.0.1:32401/library/sections");
     expect(JSON.stringify(url)).not.toContain("private-test-token");
     expect(init?.headers).toHaveProperty("X-Plex-Token", "private-test-token");
     expect(init?.redirect).toBe("error");
@@ -43,7 +47,9 @@ describe("Plex integration boundary", () => {
           ],
         }),
       );
-    expect(await new PlexClient("x", fetcher).movies("4")).toHaveLength(3);
+    expect(
+      await new PlexClient("x", "http://127.0.0.1:32401", fetcher).movies("4"),
+    ).toHaveLength(3);
     expect(fetcher.mock.calls[1][0]).toContain("X-Plex-Container-Start=1");
   });
   it("detects servers that ignore pagination instead of fetching forever", async () => {
@@ -54,7 +60,7 @@ describe("Plex integration boundary", () => {
       }),
     );
     await expect(
-      new PlexClient("x", fetcher).movies("1"),
+      new PlexClient("x", "http://127.0.0.1:32401", fetcher).movies("1"),
     ).rejects.toMatchObject({ code: "response" });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
@@ -63,6 +69,7 @@ describe("Plex integration boundary", () => {
     async (status) => {
       const c = new PlexClient(
         "private-test-token",
+        "http://127.0.0.1:32401",
         vi
           .fn<typeof fetch>()
           .mockResolvedValue(new Response("private-test-token", { status })),
@@ -79,12 +86,14 @@ describe("Plex integration boundary", () => {
     await expect(
       new PlexClient(
         "secret",
+        "http://127.0.0.1:32401",
         vi.fn<typeof fetch>().mockRejectedValue(new TypeError("secret")),
       ).server(),
     ).rejects.toMatchObject({ code: "network" });
     await expect(
       new PlexClient(
         "secret",
+        "http://127.0.0.1:32401",
         vi.fn<typeof fetch>().mockResolvedValue(new Response("{}")),
       ).server(),
     ).rejects.toMatchObject({ code: "response" });
@@ -94,6 +103,7 @@ describe("Plex integration boundary", () => {
     controller.abort();
     const c = new PlexClient(
       "x",
+      "http://127.0.0.1:32401",
       vi
         .fn<typeof fetch>()
         .mockRejectedValue(new DOMException("Aborted", "AbortError")),
@@ -123,17 +133,16 @@ describe("Plex integration boundary", () => {
     "//outside.example/x",
     "/\\outside.example/x",
   ])("rejects external paths: %s", (path) => {
-    const c = new PlexClient("secret");
+    const c = new PlexClient("secret", "http://127.0.0.1:32401");
     expect(() => c.resource(path)).toThrow(PlexError);
     expect(c.artwork(path, 200, 300)).toBeUndefined();
   });
-  it("uses resized artwork with a relative source and token only at the trusted proxy", () => {
-    const url = new PlexClient("private-test-token").artwork(
-      "/library/metadata/1/thumb/5",
-      360,
-      540,
-    )!;
-    expect(url).toContain("/plex/photo/:/transcode?");
+  it("uses resized artwork with a relative source and token only at the selected server", () => {
+    const url = new PlexClient(
+      "private-test-token",
+      "http://127.0.0.1:32401",
+    ).artwork("/library/metadata/1/thumb/5", 360, 540)!;
+    expect(url).toContain("http://127.0.0.1:32401/photo/:/transcode?");
     const parsed = new URL(url, "http://localhost");
     expect(parsed.searchParams.get("url")).toBe("/library/metadata/1/thumb/5");
     expect(parsed.searchParams.get("width")).toBe("360");
@@ -161,11 +170,14 @@ describe("preview playback decisions", () => {
     );
     await new PlexClient(
       "private-test-token",
+      "http://127.0.0.1:32401",
       fetcher,
       "test-client",
     ).preparePreview(path, new AbortController().signal);
     const [url, init] = fetcher.mock.calls[0];
-    expect(url).toBe(`/plex${path.replace("start.m3u8", "decision")}`);
+    expect(url).toBe(
+      `http://127.0.0.1:32401${path.replace("start.m3u8", "decision")}`,
+    );
     expect(url).not.toContain("private-test-token");
     expect(init).toMatchObject({
       cache: "no-store",
@@ -189,6 +201,7 @@ describe("preview playback decisions", () => {
     async (value) => {
       const client = new PlexClient(
         "secret",
+        "http://127.0.0.1:32401",
         vi.fn<typeof fetch>().mockResolvedValue(
           json({
             ...value,
@@ -211,10 +224,11 @@ describe("preview playback decisions", () => {
   ])("rejects an unsafe decision route: %s", async (path) => {
     const fetcher = vi.fn<typeof fetch>();
     await expect(
-      new PlexClient("secret", fetcher).preparePreview(
-        path,
-        new AbortController().signal,
-      ),
+      new PlexClient(
+        "secret",
+        "http://127.0.0.1:32401",
+        fetcher,
+      ).preparePreview(path, new AbortController().signal),
     ).rejects.toMatchObject({ code: "unsafe" });
     expect(fetcher).not.toHaveBeenCalled();
   });

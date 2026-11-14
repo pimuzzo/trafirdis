@@ -22,6 +22,13 @@ const signature = (url) => {
   return params.toString();
 };
 const server = createServer((req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+  if (req.method === "OPTIONS") {
+    res.writeHead(204).end();
+    return;
+  }
   const url = new URL(req.url, "http://plex-fixture:32400");
   const token =
     req.headers["x-plex-token"] || url.searchParams.get("X-Plex-Token");
@@ -50,12 +57,16 @@ const server = createServer((req, res) => {
     return;
   }
   if (url.pathname === "/photo/:/transcode") {
-    res.writeHead(302, { Location: "/protected-image" });
+    res.writeHead(302, {
+      Location: `/protected-image?${new URLSearchParams({ "X-Plex-Token": token || "" })}`,
+    });
     res.end();
     return;
   }
   if (url.pathname === "/library/parts/101/redirect.webm") {
-    res.writeHead(302, { Location: "trailer.webm" });
+    res.writeHead(302, {
+      Location: `trailer.webm?${new URLSearchParams({ "X-Plex-Token": token || "" })}`,
+    });
     res.end();
     return;
   }
@@ -128,7 +139,12 @@ const server = createServer((req, res) => {
       return;
     }
     res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-    res.end(readFileSync("/fixtures/preview.m3u8"));
+    res.end(
+      readFileSync("/fixtures/preview.m3u8", "utf8").replace(
+        "segment-0.ts",
+        `segment-0.ts?${new URLSearchParams({ "X-Plex-Token": token || "" })}`,
+      ),
+    );
     return;
   }
   if (url.pathname.endsWith("/segment-0.ts")) {

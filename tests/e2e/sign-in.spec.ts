@@ -2,7 +2,14 @@ import { test, expect, type Page } from "@playwright/test";
 
 async function hostedSignIn(
   page: Page,
-  mode: "success" | "expired" | "pending" | "no-access" | "offline" = "success",
+  mode:
+    | "success"
+    | "expired"
+    | "pending"
+    | "no-access"
+    | "offline"
+    | "multiple"
+    | "lan-fallback" = "success",
 ) {
   const calls: {
     url: string;
@@ -64,11 +71,36 @@ async function hostedSignIn(
               ? []
               : [
                   {
+                    name: "Home cinema",
+                    owned: true,
                     clientIdentifier: "server-fixture",
                     provides: "server",
                     accessToken: "synthetic-server-token",
-                    connections: [{ uri: "https://outside.example" }],
+                    httpsRequired: false,
+                    connections: [
+                      {
+                        uri: "https://server-fixture.plex.direct:32400",
+                        local: true,
+                        ...(mode === "lan-fallback"
+                          ? { address: "192.168.50.2", port: 32555 }
+                          : {}),
+                      },
+                    ],
                   },
+                  ...(mode === "multiple"
+                    ? [
+                        {
+                          name: "Shared cinema",
+                          owned: false,
+                          provides: "server",
+                          clientIdentifier: "server-shared",
+                          accessToken: "shared-server-token",
+                          connections: [
+                            { uri: "https://shared-fixture.plex.direct:32400" },
+                          ],
+                        },
+                      ]
+                    : []),
                 ],
         });
         return;
@@ -82,68 +114,91 @@ async function hostedSignIn(
       body: '<!doctype html><title>Plex authorization fixture</title><script>const parameters=new URLSearchParams(location.hash.slice(2));location.replace(parameters.get("forwardUrl"));</script>',
     }),
   );
-  await page.route("http://127.0.0.1:5175/plex/**", async (route) => {
-    const request = route.request(),
-      url = new URL(request.url());
-    calls.push({
-      url: request.url(),
-      method: request.method(),
-      token: request.headers()["x-plex-token"],
-      client: request.headers()["x-plex-client-identifier"],
-    });
-    const path = url.pathname.slice("/plex".length);
-    if (path === "/identity") {
-      await route.fulfill({
-        json: { MediaContainer: { machineIdentifier: "server-fixture" } },
+  await page.route(
+    (url) =>
+      /^(server|shared)-fixture\.plex\.direct$/.test(url.hostname) ||
+      url.origin === "http://192.168.50.2:32555",
+    async (route) => {
+      const request = route.request(),
+        url = new URL(request.url());
+      if (request.method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers });
+        return;
+      }
+      const shared = url.hostname.startsWith("shared-");
+      const identifier = shared ? "server-shared" : "server-fixture";
+      calls.push({
+        url: request.url(),
+        method: request.method(),
+        token: request.headers()["x-plex-token"],
+        client: request.headers()["x-plex-client-identifier"],
       });
-      return;
-    }
-    if (request.headers()["x-plex-token"] !== "synthetic-server-token") {
-      await route.fulfill({ status: 401 });
-      return;
-    }
-    if (path === "/") {
-      await route.fulfill({
-        json: {
-          MediaContainer: {
-            machineIdentifier: "server-fixture",
-            friendlyName: "Plex fixture",
+      const path = url.pathname;
+      if (path === "/identity") {
+        await route.fulfill({
+          headers,
+          json: { MediaContainer: { machineIdentifier: identifier } },
+        });
+        return;
+      }
+      if (
+        request.headers()["x-plex-token"] !==
+        (shared ? "shared-server-token" : "synthetic-server-token")
+      ) {
+        await route.fulfill({ status: 401 });
+        return;
+      }
+      if (path === "/") {
+        await route.fulfill({
+          headers,
+          json: {
+            MediaContainer: {
+              machineIdentifier: identifier,
+              friendlyName: "Plex fixture",
+            },
           },
-        },
-      });
-      return;
-    }
-    if (path === "/library/sections") {
-      await route.fulfill({
-        json: {
-          MediaContainer: {
-            Directory: [{ key: "1", title: "Movies", type: "movie" }],
+        });
+        return;
+      }
+      if (path === "/library/sections") {
+        await route.fulfill({
+          headers,
+          json: {
+            MediaContainer: {
+              Directory: [{ key: "1", title: "Movies", type: "movie" }],
+            },
           },
-        },
-      });
-      return;
-    }
-    if (path === "/library/sections/1/all") {
-      await route.fulfill({
-        json: {
-          MediaContainer: {
-            totalSize: 1,
-            Metadata: [
-              {
-                ratingKey: "1",
-                key: "/library/metadata/1",
-                type: "movie",
-                title: "Authorized First Light",
-                Genre: [{ tag: "Drama" }],
-              },
-            ],
+        });
+        return;
+      }
+      if (path === "/library/sections/1/all") {
+        await route.fulfill({
+          headers,
+          json: {
+            MediaContainer: {
+              totalSize: 1,
+              Metadata: [
+                {
+                  ratingKey: "1",
+                  key: "/library/metadata/1",
+                  type: "movie",
+                  title: shared
+                    ? "Authorized Shared Film"
+                    : "Authorized First Light",
+                  Genre: [{ tag: "Drama" }],
+                },
+              ],
+            },
           },
-        },
+        });
+        return;
+      }
+      await route.fulfill({
+        headers,
+        json: { MediaContainer: { Metadata: [] } },
       });
-      return;
-    }
-    await route.fulfill({ json: { MediaContainer: { Metadata: [] } } });
-  });
+    },
+  );
   return calls;
 }
 test("Plex sign-in returns to the app and stores only the verified server-specific token", async ({
@@ -171,9 +226,9 @@ test("Plex sign-in returns to the app and stores only the verified server-specif
       .filter((c) => new URL(c.url).origin === "http://127.0.0.1:5175")
       .every((c) => c.token !== "synthetic-account-token"),
   ).toBe(true);
-  expect(
-    calls.find((c) => new URL(c.url).pathname === "/plex/identity")?.token,
-  ).toBeUndefined();
+  expect(calls.some((c) => new URL(c.url).pathname === "/identity")).toBe(
+    false,
+  );
   expect(
     calls.filter((c) => new URL(c.url).pathname === "/api/v2/pins"),
   ).toHaveLength(1);
@@ -217,15 +272,13 @@ test("expired authorization stays recoverable without accepting a token", async 
     page.getByRole("button", { name: "Sign in with Plex", exact: true }),
   ).toBeEnabled();
 });
-test("account access must match the configured Plex server", async ({
-  page,
-}) => {
+test("an account without servers remains recoverable", async ({ page }) => {
   await hostedSignIn(page, "no-access");
   await page.goto("/");
   await page
     .getByRole("button", { name: "Sign in with Plex", exact: true })
     .click();
-  await expect(page.getByRole("alert")).toContainText("does not have access", {
+  await expect(page.getByRole("alert")).toContainText("No Plex servers", {
     timeout: 15000,
   });
   expect(
@@ -305,4 +358,151 @@ test("Plex cloud outages do not block sample browsing", async ({ page }) => {
   await expect(
     page.getByText("YOU’RE EXPLORING THE SAMPLE LIBRARY"),
   ).toBeVisible();
+});
+
+test("multiple servers require a choice, remember it and restore it after reload and a new login", async ({
+  page,
+}) => {
+  const calls = await hostedSignIn(page, "multiple");
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Sign in with Plex", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Choose your Plex server" }),
+  ).toBeVisible();
+  expect(
+    calls.some((c) => new URL(c.url).hostname.endsWith(".plex.direct")),
+  ).toBe(false);
+  await page
+    .getByRole("button", { name: "Shared cinema Shared with you" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Authorized Shared Film", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("trafirdis.preferred-server"),
+    ),
+  ).toBe("server-shared");
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Authorized Shared Film", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Connection settings" }).click();
+  await page
+    .getByRole("button", { name: "Disconnect and clear session" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Sign in with Plex", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
+  ).toBeNull();
+  await page
+    .getByRole("button", { name: "Sign in with Plex", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Authorized Shared Film", exact: true }),
+  ).toBeVisible();
+  expect(
+    calls.filter((c) => new URL(c.url).hostname.startsWith("server-fixture")),
+  ).toHaveLength(0);
+  await page.getByRole("button", { name: "Connection settings" }).click();
+  await page
+    .getByRole("button", { name: "Change server", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Sign in with Plex", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Choose your Plex server" }),
+  ).toBeVisible();
+});
+
+test("an unavailable remembered server leaves the chooser usable for another server", async ({
+  page,
+}) => {
+  await hostedSignIn(page, "multiple");
+  await page.addInitScript(() =>
+    localStorage.setItem("trafirdis.preferred-server", "server-fixture"),
+  );
+  await page.route("https://server-fixture.plex.direct:32400/**", (route) =>
+    route.abort(),
+  );
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Sign in with Plex", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Cannot connect to this Plex server",
+  );
+  await page
+    .getByRole("button", { name: "Shared cinema Shared with you" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Authorized Shared Film", exact: true }),
+  ).toBeVisible();
+});
+
+test("the server chooser fits phone screens and cancellation keeps sample browsing available", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await hostedSignIn(page, "multiple");
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Sign in with Plex", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Choose your Plex server" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Shared cinema Shared with you" }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.getByRole("button", { name: "Cancel sign-in" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Choose your Plex server" }),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("trafirdis.token")),
+  ).toBeNull();
+  await page
+    .getByRole("button", { name: "Explore the sample library" })
+    .click();
+  await expect(
+    page.getByText("YOU’RE EXPLORING THE SAMPLE LIBRARY"),
+  ).toBeVisible();
+});
+
+test("an HTTP app falls back to the Plex-advertised LAN IP when plex.direct DNS fails", async ({
+  page,
+}) => {
+  const calls = await hostedSignIn(page, "lan-fallback");
+  await page.route("https://server-fixture.plex.direct:32400/**", (route) =>
+    route.abort("namenotresolved"),
+  );
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Sign in with Plex", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Authorized First Light", exact: true }),
+  ).toBeVisible();
+  const saved = await page.evaluate(() =>
+    JSON.parse(sessionStorage.getItem("trafirdis.server")!),
+  );
+  expect(saved.base).toBe("http://192.168.50.2:32555");
+  const lan = calls.filter(
+    (call) => new URL(call.url).hostname === "192.168.50.2",
+  );
+  expect(lan.length).toBeGreaterThan(0);
+  expect(lan.every((call) => call.token === "synthetic-server-token")).toBe(
+    true,
+  );
 });

@@ -63,7 +63,7 @@ describe("bounded retained preview sessions", () => {
         source: "Plex trailer",
         session,
       },
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       { resolved: vi.fn(), playing: vi.fn(), blocked: vi.fn() },
       pool.epoch,
     );

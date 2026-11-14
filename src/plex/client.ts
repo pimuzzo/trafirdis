@@ -1,6 +1,7 @@
 import { getClientIdentifier } from "./device";
 import type { Library, Movie, Server } from "../domain/movie";
 import type { PlexContainer, PlexMetadata } from "./schema";
+import { serverOrigin } from "./connection";
 
 export class PlexError extends Error {
   constructor(
@@ -42,12 +43,29 @@ export function mapMovie(m: PlexMetadata): Movie {
   };
 }
 export class PlexClient {
-  readonly base = "/plex";
+  readonly base: string;
   constructor(
     private token: string,
+    base: string,
     private fetcher: typeof fetch = (...args) => fetch(...args),
     readonly clientIdentifier = getClientIdentifier(),
-  ) {}
+  ) {
+    this.base = serverOrigin(base);
+  }
+  trustsResource(value: string): boolean {
+    try {
+      const url = new URL(value, window.location.origin);
+      const base = new URL(`${this.base}/`, window.location.origin);
+      return (
+        url.origin === base.origin &&
+        url.pathname.startsWith(base.pathname) &&
+        !url.username &&
+        !url.password
+      );
+    } catch {
+      return false;
+    }
+  }
   private headers(): Record<string, string> {
     return {
       Accept: "application/json",
@@ -114,6 +132,7 @@ export class PlexClient {
         {
           headers: this.headers(),
           signal: AbortSignal.timeout(3000),
+          keepalive: true,
           redirect: "error",
           credentials: "omit",
         },
@@ -183,7 +202,7 @@ export class PlexClient {
         );
       throw new PlexError(
         "network",
-        "Cannot reach Plex. Check the server address, local network, and proxy configuration.",
+        "Cannot reach Plex. Check the server connection, HTTPS and browser network permissions.",
       );
     }
   }

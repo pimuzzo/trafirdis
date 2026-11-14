@@ -1,5 +1,6 @@
 import { PlexClient } from "./client";
 import { getClientIdentifier } from "./device";
+import { serverOrigin, type PlexConnection } from "./connection";
 
 export class PlexSignInError extends Error {
   constructor(
@@ -20,14 +21,69 @@ export interface PendingSignIn extends PlexPin {
   state: string;
   clientId: string;
 }
-interface PlexResource {
-  clientIdentifier?: string;
-  provides?: string;
-  accessToken?: string;
+export interface PlexResource {
+  id: string;
+  name: string;
+  owned: boolean;
+  token: string;
+  connections: string[];
 }
 // Scope pending authorization and callback state to Trafirdis.
 export const pendingSignInKey = "trafirdis.pending-sign-in";
 const requestTimeout = 12000;
+
+function localHttpOrigin(
+  connection: Record<string, unknown>,
+): string | undefined {
+  // Use only a private IPv4 address explicitly advertised as local. Never decode
+  // addresses out of plex.direct hostnames or guess a server's port.
+  if (
+    !(connection.local === true || connection.local === 1) ||
+    connection.relay ||
+    typeof connection.address !== "string" ||
+    !/^(?:\d{1,3}\.){3}\d{1,3}$/.test(connection.address)
+  )
+    return;
+  const octets = connection.address.split(".").map(Number);
+  if (
+    typeof connection.port !== "number" &&
+    (typeof connection.port !== "string" || !/^\d+$/.test(connection.port))
+  )
+    return;
+  const port = Number(connection.port);
+  if (
+    octets.some((n) => n > 255) ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65535 ||
+    !(
+      octets[0] === 10 ||
+      (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+      (octets[0] === 192 && octets[1] === 168)
+    )
+  )
+    return;
+  return serverOrigin(`http://${octets.join(".")}:${port}`);
+}
+
+function waitForCandidate(delay: number, signal: AbortSignal): Promise<void> {
+  if (!delay) {
+    signal.throwIfAborted();
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Connection cancelled", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, delay);
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+  });
+}
 
 export class PlexSignInClient {
   constructor(
@@ -157,29 +213,10 @@ export class PlexSignInClient {
       );
     return token;
   }
-  async serverToken(
+  async resources(
     accountToken: string,
     signal?: AbortSignal,
-  ): Promise<string> {
-    // Identify only the fixed configured PMS. Never connect to cloud-supplied URLs.
-    let identity;
-    try {
-      identity = await new PlexClient("", this.fetcher, this.clientId).request(
-        "/identity",
-        signal,
-      );
-    } catch (error) {
-      if (signal?.aborted) throw error;
-      throw new PlexSignInError(
-        "access",
-        "Plex sign-in succeeded, but the configured server could not be reached. Check its address and network connection, then try again.",
-      );
-    }
-    if (!identity.machineIdentifier)
-      throw new PlexSignInError(
-        "response",
-        "The configured Plex server did not provide its identity.",
-      );
+  ): Promise<PlexResource[]> {
     const raw = await this.request(
       "https://clients.plex.tv/api/v2/resources?includeHttps=1&includeRelay=1&includeIPv6=1",
       { method: "GET", headers: { "X-Plex-Token": accountToken } },
@@ -190,37 +227,114 @@ export class PlexSignInClient {
         "response",
         "Plex did not return a valid server list.",
       );
-    const resource = raw.find(
-      (entry: PlexResource) =>
-        entry &&
-        entry.clientIdentifier === identity.machineIdentifier &&
-        typeof entry.provides === "string" &&
-        entry.provides.split(",").includes("server"),
-    ) as PlexResource | undefined;
-    if (
-      !resource ||
-      typeof resource.accessToken !== "string" ||
-      !resource.accessToken
-    )
+    const servers = new Map<string, PlexResource>();
+    for (const entry of raw) {
+      if (
+        !entry ||
+        typeof entry !== "object" ||
+        typeof entry.provides !== "string" ||
+        !entry.provides.split(",").includes("server") ||
+        typeof entry.clientIdentifier !== "string" ||
+        !entry.clientIdentifier ||
+        typeof entry.accessToken !== "string" ||
+        !entry.accessToken
+      )
+        continue;
+      const candidates: { origin: string; priority: number }[] = [];
+      for (const connection of Array.isArray(entry.connections)
+        ? entry.connections
+        : []) {
+        if (!connection || typeof connection !== "object") continue;
+        try {
+          const origin = serverOrigin(connection.uri);
+          if (
+            (entry.httpsRequired === true || entry.httpsRequired === 1) &&
+            origin.startsWith("http:")
+          )
+            continue;
+          // Prefer local connections, then remote and relay; HTTPS wins ties.
+          const priority =
+            (connection.relay ? 4 : connection.local ? 0 : 2) +
+            (origin.startsWith("https:") ? 0 : 1);
+          candidates.push({ origin, priority });
+        } catch {
+          /* Ignore malformed, credential-bearing or mixed-content URLs. */
+        }
+        if (
+          window.location.protocol === "http:" &&
+          (entry.httpsRequired === false || entry.httpsRequired === 0)
+        ) {
+          const local = localHttpOrigin(connection);
+          if (local) candidates.push({ origin: local, priority: 1 });
+        }
+      }
+      servers.set(entry.clientIdentifier, {
+        id: entry.clientIdentifier,
+        name:
+          typeof entry.name === "string" && entry.name
+            ? entry.name
+            : "Plex Media Server",
+        owned: entry.owned === true || entry.owned === 1,
+        token: entry.accessToken,
+        connections: [
+          ...new Set(
+            candidates
+              .sort((a, b) => a.priority - b.priority)
+              .map((c) => c.origin),
+          ),
+        ],
+      });
+    }
+    if (!servers.size)
       throw new PlexSignInError(
         "access",
-        "Your Plex account does not have access to the configured server. Check the account and server sharing settings.",
+        "No Plex servers are available to this account. Check your server and sharing settings, then sign in again.",
       );
-    // Verify the server-specific token before saving it in the browser session.
-    try {
-      await new PlexClient(
-        resource.accessToken,
+    return [...servers.values()];
+  }
+  async connectServer(
+    resource: PlexResource,
+    signal?: AbortSignal,
+  ): Promise<PlexConnection> {
+    signal?.throwIfAborted();
+    const race = new AbortController();
+    const pendingSignal = signal
+      ? AbortSignal.any([signal, race.signal])
+      : race.signal;
+    const attempts = resource.connections.map(async (base, index) => {
+      await waitForCandidate(index * 250, pendingSignal);
+      const scopedSignal = AbortSignal.any([
+        pendingSignal,
+        AbortSignal.timeout(10000),
+      ]);
+      // Public /identity can allow CORS only for app.plex.tv. Authenticate
+      // directly against an origin advertised by this account's resource API,
+      // then verify the returned identity before accepting the connection.
+      const server = await new PlexClient(
+        resource.token,
+        base,
         this.fetcher,
         this.clientId,
-      ).server(signal);
-    } catch (error) {
-      if (signal?.aborted) throw error;
+      ).request("/", scopedSignal, "no-store");
+      if (server.machineIdentifier !== resource.id)
+        throw new PlexSignInError(
+          "access",
+          "The server identity did not match the selected Plex resource.",
+        );
+      scopedSignal.throwIfAborted();
+      return { token: resource.token, base, machineIdentifier: resource.id };
+    });
+    try {
+      return await Promise.any(attempts);
+    } catch {
+      signal?.throwIfAborted();
       throw new PlexSignInError(
         "access",
-        "The configured server could not verify Plex access. Check the server connection and try again.",
+        "Cannot connect to this Plex server. Check that it is online, allows secure connections and is reachable from this browser. Allow local network access if your browser asks, then try again or choose another server.",
       );
+    } finally {
+      race.abort();
     }
-    return resource.accessToken;
   }
 }
 export function signInUrl(

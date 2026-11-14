@@ -222,14 +222,10 @@ export async function playAttempt(
           fragLoadingMaxRetry: 0,
           xhrSetup: (xhr, url) => {
             // Never send tokens to remote URLs embedded in a provider playlist.
-            const target = new URL(url, window.location.origin);
-            if (
-              target.origin !== window.location.origin ||
-              !target.pathname.startsWith("/plex/")
-            )
+            if (!client.trustsResource(url))
               throw new PlaybackError(
                 "network",
-                "Plex returned a stream outside the configured server proxy.",
+                "Plex returned a stream outside the selected server.",
               );
             xhr.setRequestHeader("X-Plex-Token", client.authHeader());
           },

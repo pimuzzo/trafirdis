@@ -18,7 +18,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open **http://127.0.0.1:5173**. The default proxy target is `http://192.168.178.46:32400`; change `PLEX_SERVER_URL` in `.env.local` if needed, then restart Vite. Choose **Sign in with Plex**, authorize Trafirdis on Plex’s official website, and return to your library. Trafirdis never asks for your Plex password. An advanced manual-token option remains available; do not paste tokens into issues, source files, screenshots, or chat.
+Open **http://127.0.0.1:5173**. Choose **Sign in with Plex**, authorize Trafirdis on Plex’s official website, and connect to a server from your account. A single server or your previously selected server connects automatically; otherwise choose from your owned and shared servers. No server URL environment variable is required. Trafirdis never asks for your Plex password. An advanced manual-token option remains available; do not paste tokens into issues, source files, screenshots, or chat.
 
 You can also choose **Explore the sample library**. It contains twelve explicitly fictional movies and locally bundled original illustrations. It makes no Plex or third-party requests and does not simulate successful trailers.
 
@@ -29,33 +29,43 @@ npm run build
 npm run preview
 ```
 
-Open **http://127.0.0.1:4173**. Vite Preview includes the same Plex proxy. Development and preview servers bind only to loopback by default. Preview is for local testing, not public production hosting.
+Open **http://127.0.0.1:4173**. Vite Preview serves the static build; the browser connects directly to the selected Plex server. Development and preview servers bind only to loopback by default. Preview is for local testing, not public production hosting.
+
+## Publish as a static HTTPS site
+
+Run `npm ci` and `npm run build`. Publish the complete `dist/` directory at the root of an HTTPS site, preserving `runtime-config.js`, the privacy notice and static assets. No application backend, Plex proxy, account secret or per-user deployment setting is required. Do not publish the Vite development server. The app currently expects hosting at the domain root, rather than a subdirectory.
+
+For Cloudflare Pages, use `npm run build` as the build command and `dist` as the output directory. Keep the generated `_headers` file: Pages uses it to apply the security headers in [`public/_headers`](public/_headers) to every path. Other static hosts must configure equivalent response headers themselves; the HTML meta policy alone cannot prevent framing. Avoid adding duplicate or conflicting policies at a reverse proxy.
+
+The production Content Security Policy permits scripts only from the application's own origin, blocks inline/evaluated scripts, forms, embedded frames and plugins, and prevents other pages from framing Trafirdis. Styles retain inline support for the existing UI, and HLS workers can use blob URLs. API, artwork and media connections initially support account discovery and become restricted to the selected server before authenticated media renders. Responses also disable MIME sniffing, referrer disclosure, camera, microphone and geolocation access. Docker includes the same headers, including on errors and cached assets. Only the local Vite development server permits inline scripts and local WebSockets for React refresh; production builds and Vite Preview use the stricter policy.
+
+Users sign in to their own Plex account and choose their own server. The hosting server distributes application files; Plex tokens, catalog requests, artwork and trailers travel between the user's browser, Plex authentication services and the selected media server. No media relay is provided by Trafirdis hosting. Serve this application from an origin you trust: its JavaScript can access browser session credentials. Do not add analytics or scripts that capture requests or browser storage.
+
+The browser must be able to reach the selected server. An HTTPS site requires an HTTPS Plex connection, working server CORS and valid certificates, commonly through Plex's advertised `plex.direct` URLs. Local connections can require the browser's local-network permission and compatible DNS; outside the server's network, an advertised remote/relay connection must actually work. A resource being listed does not establish reachability or playback support. See [Plex secure connections](https://support.plex.tv/articles/206225077-how-to-use-secure-server-connections/) and [resource discovery](https://support.plex.tv/articles/206721658-using-plex-tv-resources-information-to-troubleshoot-app-connections/).
+
+Static HTTPS hosting, cross-origin API/artwork, native video, native HLS and MSE HLS are covered with synthetic local HTTPS servers. Tests use a temporary self-signed fixture certificate with browser certificate errors explicitly ignored; this does not establish real Plex certificate, CORS, local-network permission, relay, Safari or provider compatibility. Validate your real server in the target browsers before announcing a hosted deployment.
 
 ## Run with Docker
 
-Trafirdis remains a frontend SPA. Docker packages a production build with **Nginx serving static files and proxying `/plex/`**. It does not run an application backend, database, Plex server, or custom transcoder. Only Docker Engine/Desktop and Docker Compose v2 are required on the host.
+Trafirdis remains a frontend SPA. Docker packages a production build with **Nginx serving static files**. All Plex requests originate in the browser. It does not run an application backend, database, Plex server, or custom transcoder. Only Docker Engine/Desktop and Docker Compose v2 are required on the host.
 
 From your project checkout:
 
 ```bash
 cp .env.example .env
-# Edit PLEX_SERVER_URL in .env if your Plex address differs.
 docker compose up --build -d
 ```
 
-Open **http://localhost:8080** and choose **Sign in with Plex**. With the supplied Plex address, `docker compose up --build -d` also works without an environment file. No token belongs in `.env`, Compose, build arguments, or the image.
+Open **http://localhost:8080** and choose **Sign in with Plex**. `docker compose up --build -d` also works without an environment file: the browser discovers and connects to your Plex server after sign-in. No token belongs in `.env`, Compose, build arguments, or the image.
 
 Compose reads `.env` automatically. If you already configured `.env.local` for Vite, use `docker compose --env-file .env.local up --build -d` instead.
 
-| Docker setting          | Default                                             | Purpose                                                                                                                                                     |
-| ----------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PLEX_SERVER_URL`       | `http://192.168.178.46:32400`                       | Plex origin reachable **from the container**. Applied at startup to both the proxy and the browser's server label; changing it does not require rebuilding. |
-| `TRAFIRDIS_DIAGNOSTICS` | `false`                                             | Enables advanced trailer diagnostics at container startup. Use `true` to inspect a sample and download a local report.                                      |
-| `TRAFIRDIS_PORT`        | `8080`                                              | Published port on the Docker host.                                                                                                                          |
-| `TRAFIRDIS_BIND_IP`     | `127.0.0.1`                                         | Host interface. Set `0.0.0.0` deliberately for access from other devices on your trusted LAN.                                                               |
-| `VITE_SECTION_ORDER`    | `Recently Added,Continue Watching,Unwatched Movies` | Public rail order, passed to the frontend build. Rebuild after changing it.                                                                                 |
-
-Use your Plex server's LAN IP or a hostname resolvable inside Docker. `localhost` inside the container refers to the container itself. If Plex runs on the Docker host, its LAN address is the simplest option; Docker Desktop also provides `host.docker.internal`. Linux host-gateway mappings or shared Docker networks can be supplied with a local Compose override if needed.
+| Docker setting          | Default                                             | Purpose                                                                                                                |
+| ----------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `TRAFIRDIS_DIAGNOSTICS` | `false`                                             | Enables advanced trailer diagnostics at container startup. Use `true` to inspect a sample and download a local report. |
+| `TRAFIRDIS_PORT`        | `8080`                                              | Published port on the Docker host.                                                                                     |
+| `TRAFIRDIS_BIND_IP`     | `127.0.0.1`                                         | Host interface. Set `0.0.0.0` deliberately for access from other devices on your trusted LAN.                          |
+| `VITE_SECTION_ORDER`    | `Recently Added,Continue Watching,Unwatched Movies` | Public rail order, passed to the frontend build. Rebuild after changing it.                                            |
 
 After editing runtime settings, run `docker compose up -d` to recreate the container. For LAN access, open `http://<docker-host-ip>:8080`; use HTTPS through your existing TLS reverse proxy if you require encrypted browser traffic. Preview sessions also work on HTTP LAN origins where `crypto.randomUUID` is unavailable.
 
@@ -65,18 +75,18 @@ docker compose logs        # Startup messages; request/error logging is disabled
 docker compose down        # Stop Trafirdis; the Plex server is separate
 ```
 
-The image runs as the unprivileged `nginx` user on container port 8080. Compose drops capabilities, uses a read-only root filesystem and temporary `/tmp`, and publishes only on loopback by default. The health check verifies the static server, so an offline Plex server does not take down the SPA. Metadata and media pass through one fixed configured origin; streams are unbuffered, range requests are preserved, local redirects stay under `/plex`, and external redirects are rejected.
+The image runs as the unprivileged `nginx` user on container port 8080. Compose drops capabilities, uses a read-only root filesystem and temporary `/tmp`, and publishes only on loopback by default. The health check verifies the static server, so an offline Plex server does not take down the SPA. Plex connectivity and media delivery are handled directly by the browser and the selected server.
 
-Native media query tokens are forwarded only to Plex. Nginx access/error logging is disabled because its error messages can include original token-bearing URLs. This differs from the Vite development middleware, which converts query tokens to headers. URLs can still appear in browser developer tools or an additional reverse proxy's logs; configure that proxy's redaction separately.
+Plex credentials and media requests go directly from the browser to the selected Plex server. Nginx serves application files only; built-in access/error logging remains disabled. An additional hosting reverse proxy should not capture browser storage, and scripts served by the hosting origin must be trusted.
 
-When Plex redirects native artwork or video to another resource on the configured server, both proxies preserve the media URL's authentication on the trusted `/plex` redirect. Vite strips the query token back into a header on every hop. Header-only authentication is not added to redirect URLs, and external redirects remain blocked.
+API fetches reject redirects. Native artwork/video URLs carry a server token, so the selected server must provide valid same-origin media URLs and authenticated redirects. The browser's connection policy blocks unrelated media origins. Trafirdis does not rewrite server URLs or inject authentication through a hosting proxy.
 
 For a manual image build:
 
 ```bash
 docker build -t trafirdis:local .
 docker run --rm -p 127.0.0.1:8080:8080 \
-  -e PLEX_SERVER_URL=http://192.168.178.46:32400 trafirdis:local
+  trafirdis:local
 ```
 
 Docker deployments hide advanced trailer diagnostics by default. Set `TRAFIRDIS_DIAGNOSTICS=true` to enable them without rebuilding the image. The original PRD did not require Docker; packaging was added in response to the subsequent request. The real-server acceptance checks below still apply.
@@ -91,7 +101,9 @@ Before updating an existing Docker checkout, stop its stack using the previous C
 docker compose down
 ```
 
-Update the checkout and use `TRAFIRDIS_PORT`, `TRAFIRDIS_BIND_IP` and `TRAFIRDIS_DIAGNOSTICS` in your `.env` file. `PLEX_SERVER_URL` and `VITE_SECTION_ORDER` retain their names. Then rebuild and start the Trafirdis service:
+Remove the former server-address environment setting from your deployment and recreate the container. The image now serves only static files and never proxies Plex requests. Old token-only or proxy-based sessions require sign-in again; existing Trafirdis device, library and view preferences remain. The user's browser, rather than the container, must be able to reach the selected server.
+
+Update the checkout and use `TRAFIRDIS_PORT`, `TRAFIRDIS_BIND_IP` and `TRAFIRDIS_DIAGNOSTICS` in your `.env` file. `VITE_SECTION_ORDER` retains its name. Then rebuild and start the Trafirdis service:
 
 ```bash
 docker compose up --build -d
@@ -109,12 +121,11 @@ The intended hosted repository name is `trafirdis`. Repository settings and Git 
 
 | Setting              | Location                              | Purpose                                                                                                                                                |
 | -------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `PLEX_SERVER_URL`    | `.env.local`                          | Plex HTTP(S) origin, including port. No credentials, path, or query. Used by the Vite proxy or Docker runtime.                                         |
 | `VITE_SECTION_ORDER` | `.env.local`                          | Comma-separated rail titles, followed by remaining genres alphabetically. Default: `Recently Added,Continue Watching,Unwatched Movies`.                |
 | Plex token           | Plex sign-in or advanced manual entry | A verified server-specific token is stored in `sessionStorage`. Cleared on disconnect. Manual entry also supports an in-memory fallback.               |
 | Movie library        | Catalog library selector              | Appears with multiple movie libraries. The choice is remembered per server in this browser; an unavailable choice falls back to an accessible library. |
 
-Never create a `VITE_PLEX_TOKEN` setting: Vite embeds `VITE_` variables in public JavaScript. `.env.local` is ignored by Git. The development build embeds only the server origin for display; Docker supplies a public runtime override. Authentication is entered in the browser in both cases.
+Never create a `VITE_PLEX_TOKEN` setting: Vite embeds `VITE_` variables in public JavaScript. `.env.local` is ignored by Git. Deployment configuration contains only public UI/diagnostics settings; server discovery and authentication happen in the browser.
 
 ## Sign in with Plex
 
@@ -122,13 +133,19 @@ Choose **Sign in with Plex** on the connection screen. Trafirdis creates a stron
 
 The pending flow is kept in this tab’s session storage with a random return-state value. The return must match the stored state and client identifier, and authorization is bounded by Plex’s reported expiry and a maximum local lifetime of ten minutes. Cancel sign-in aborts requests and polling. Invalid, expired, rejected, interrupted, or throttled sign-in stays on the connection screen with a recoverable error.
 
-After authorization, Trafirdis reads the fixed configured server’s unauthenticated `/identity` endpoint and matches its `machineIdentifier` to the authenticated Plex cloud resource list. It obtains that server’s `accessToken`, verifies it against the configured server, and stores **only the server token** in the browser session. The broader Plex account token is used transiently only with Plex’s resource API and is not saved or sent to the media server. Connection URLs returned by the resource list are ignored: signing in does not change your configured proxy target.
+After authorization, Trafirdis requests the Plex cloud resource list and shows the owned/shared resources that provide a server and an access token. With one server, or a still-accessible remembered choice, it connects automatically. **Change server** in Connection settings clears that preference and returns to sign-in and selection. A failed automatic connection leaves the server chooser available for retry or another server.
 
-Sign-in makes browser requests directly to `https://plex.tv` and `https://clients.plex.tv`; the container still serves only static files and proxies the configured media server. Internet access and browser session storage are required for hosted sign-in. The page’s connection policy allows these two Plex origins specifically. Other Plex servers listed in your account are not contacted. The non-secret client identifier is reused from local storage, with session/in-memory fallbacks, so Plex can identify this app instance in Authorized Devices.
+For the selected server only, Trafirdis tries the advertised local connections first, then remote and relay connections, preferring HTTPS within each group. HTTPS app origins reject HTTP alternatives. Each candidate is checked with an authenticated `GET /` using that resource’s token, and its returned `machineIdentifier` must match the selected cloud resource before the connection is saved. Candidate checks start 250 milliseconds apart; the first identity-verified response wins and cancels the others, with a ten-second deadline per started check. Public `/identity` is not a prerequisite: real PMS responses can restrict its CORS permission to Plex’s own web origin even while authenticated access works.
 
-**Use a Plex token instead** expands the advanced manual option. To obtain one manually, sign in to Plex Web, open a library item, choose **Get Info → View XML**, and copy the `X-Plex-Token` value from the opened URL. [Plex’s official token instructions](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) explain the procedure. A manually entered token can be used without a cloud sign-in request. Sample browsing still makes no Plex/cloud requests.
+HTTP deployments can additionally try a private IPv4 LAN address and its exact port from the selected Plex resource's connection metadata when it is explicitly local, not a relay, and the server explicitly reports `httpsRequired: false`. No address is extracted from DNS names, no port is guessed and no HTTP fallback is added on HTTPS app origins or when secure transport is required/unknown. This handles unreachable `plex.direct` DNS on HTTP LAN deployments without a configured server URL. HTTP traffic is unencrypted; hosted HTTPS sites still require working HTTPS Plex connections. Tests cover DNS failure with a successful LAN fallback, stalled probes, cancellation and the secure-transport guards.
 
-Disconnect clears local access and catalog caches; it does not revoke Plex’s Authorized Devices entry. You can revoke the app through Plex’s account settings. Plex Home managed-user switching and automatic server selection remain outside this MVP. Maintainer smoke testing has confirmed library browsing and Plex previews in Chrome/Docker. The automated sign-in tests simulate Plex responses and redirects; full account/server compatibility still needs the acceptance checks below.
+The account token is used transiently only with Plex’s resource API and is discarded after lookup. Resource tokens remain in memory while choosing; only the verified selected token and connection are stored in this tab’s session storage (`trafirdis.token`, `trafirdis.server`). The remembered server ID (`trafirdis.preferred-server`) contains no credential and is checked against each fresh account resource list.
+
+Sign-in makes browser requests directly to `https://plex.tv` and `https://clients.plex.tv`. Normal catalog, artwork and preview traffic goes directly from the browser to the chosen Plex connection. Internet access and browser session storage are required for hosted sign-in. Unselected account servers are not probed. The non-secret client identifier is reused from local storage, with session/in-memory fallbacks, so Plex can identify this app instance in Authorized Devices.
+
+**Use a Plex token instead** expands the advanced manual option. To obtain one manually, sign in to Plex Web, open a library item, choose **Get Info → View XML**, and copy the `X-Plex-Token` value from the opened URL. [Plex’s official token instructions](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) explain the procedure. A manually entered token can be used without a cloud sign-in request. Also enter the server HTTP(S) origin in the form; Trafirdis verifies access before connecting. Sample browsing still makes no Plex/cloud requests.
+
+Disconnect clears local access and catalog caches; it does not revoke Plex’s Authorized Devices entry. You can revoke the app through Plex’s account settings. Plex Home managed-user switching remains outside this MVP. Maintainer smoke testing has confirmed library browsing and Plex previews in Chrome/Docker. The automated sign-in tests simulate Plex responses and redirects; full account/server compatibility still needs the acceptance checks below.
 
 ## Browsing
 
@@ -207,13 +224,13 @@ Plex Pass does not guarantee every title has a trailer or that every browser can
 
 ## Security and privacy
 
-This is a personal local-network prototype. `sessionStorage` tokens can be read by scripts executing on the application's origin and by browser extensions with sufficient access. They survive reloads within the tab. Disconnect clears the token and query caches; closing the tab normally ends the session. Do not use a shared or untrusted browser profile.
+Trafirdis supports personal self-hosting and static HTTPS hosting. `sessionStorage` tokens can be read by scripts executing on the application's origin and by browser extensions with sufficient access. They survive reloads within the tab. Disconnect clears the token and query caches; closing the tab normally ends the session. Do not use a shared or untrusted browser profile.
 
-API requests send authentication in headers. Native image/video elements require a token in their same-origin proxy URL, so credentials can be visible in browser developer tools. The local Vite middleware removes that query parameter and forwards it as a header before proxying, keeping token-bearing URLs out of Vite proxy error logs. Do not publish browser network captures or put access logs ahead of this middleware without redaction. HTTP on your LAN does not encrypt traffic; use Plex HTTPS and an HTTPS app origin if you require encrypted transport. Hosted sign-in always uses Plex HTTPS endpoints, and the authorization callback URL contains a random state value rather than a token.
+API requests send authentication in headers. Native image/video URLs carry the server token and can be visible in browser developer tools and Plex-side logs. All API, artwork, preview and cleanup requests go to the selected Plex origin; the static host receives no Plex credentials in normal application requests. Do not publish browser network captures. HTTP LAN traffic is not encrypted; HTTPS app origins require HTTPS Plex connections. Hosted sign-in always uses Plex HTTPS endpoints, and the callback URL contains a random state value rather than a token.
 
-Only relative, trusted Plex media resource paths are accepted. The hosted sign-in integration separately uses the fixed Plex HTTPS authentication/resource endpoints. External redirects are blocked, HLS requests are checked before attaching credentials, a media/connect content-security policy restricts media to this origin and connections to this origin plus the two required Plex sign-in origins, and pages use a no-referrer policy. Plex Web links contain no token and use `noopener noreferrer`. All artwork and sample assets are local or served through the Plex proxy. There is no telemetry or analytics SDK.
+Only relative, trusted Plex media resource paths are accepted. The hosted sign-in integration separately uses the fixed Plex HTTPS authentication/resource endpoints. API fetches reject redirects. The initial content-security policy permits HTTP(S) discovery; before authenticated media renders, a second, stricter policy limits connections, images and media to the app and selected Plex origin. That policy also blocks redirects to other origins. Disconnecting reloads the page because CSP restrictions cannot be relaxed in place. HLS requests are checked against the selected origin before attaching credentials, and pages use a no-referrer policy. Plex Web links contain no token and use `noopener noreferrer`. Artwork comes from the selected Plex connection; sample assets are local. There is no telemetry or analytics SDK.
 
-The Docker image supplies a local/LAN production reverse proxy with those protections. If placing another proxy in front, preserve the `/plex` prefix and streaming behavior, configure TLS and authentication for your deployment, and prevent token-bearing request URLs from entering access/error logs. Do not publicly expose the Vite development server or an arbitrary-target proxy.
+The Docker image is a static web server. If placing a reverse proxy in front, configure TLS and any deployment authentication there; do not configure a Plex media route. A restrictive hosting CSP header must allow server discovery and the selected Plex origin, because the application's meta policies cannot relax a response-header policy. Do not publicly expose the Vite development server.
 
 ## Development and tests
 
@@ -221,8 +238,8 @@ The Docker image supplies a local/LAN production reverse proxy with those protec
 npm run check          # Unit/integration tests, TypeScript, production build
 npm run test:watch
 npx playwright install chromium
-npm run test:e2e       # Real Chromium interaction, video and proxy tests
-npm run test:docker    # Test a built image with the real Nginx proxy and browser playback
+npm run test:e2e       # Real Chromium interaction, direct API and video tests
+npm run test:docker    # Test static Nginx hosting and direct browser playback
 npm run format:check
 ```
 
@@ -232,7 +249,7 @@ If using an already installed Chromium executable:
 PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium npm run test:e2e
 ```
 
-The browser suite starts loopback-only Vite on the dedicated port 5175 with a local proxy fixture on 32401. The suite refuses to reuse an existing server on that port, so it always tests the configured fixture target. It requires no Plex token or real server. Generated WebM and HLS clips in `tests/fixtures` contain only a solid color and sine wave. They exercise actual media decoding without copyrighted trailers or external network dependencies. Tests cover grouping/filtering, pagination/errors, URL trust, trailer preference and caching, selection cancellation, timeout/cleanup, real native and HLS playback, keyboard/modal interactions, privacy, proxy behavior, and narrow layouts.
+The static HTTPS fixture requires the `openssl` command to generate its temporary test certificate. The browser suite starts loopback-only Vite on dedicated port 5175 and refuses to reuse an existing server. Plex catalog fixtures are cross-origin browser responses; static-hosting tests use separate loopback HTTPS servers for the production build and synthetic Plex API/media, without an application proxy. No real Plex token or library is used. Generated WebM/HLS clips in `tests/fixtures` contain only a solid color and sine wave. Tests cover grouping/filtering, pagination/errors, trusted URLs, trailer caching/lifecycle, actual native and HLS decoding, keyboard/modal interactions, sign-in/server selection, privacy and narrow layouts.
 
 ### GitHub Actions
 
@@ -240,7 +257,7 @@ The browser suite starts loopback-only Vite on the dedicated port 5175 with a lo
 
 - **Quality checks**: locked dependency installation, formatting (including workflow files), unit/integration tests, TypeScript, and a production build.
 - **Browser tests**: the complete Playwright suite against the local synthetic Plex fixture. CI installs Google Chrome so native and HLS tests exercise its media codec support. On failure, the HTML report and screenshots/traces are uploaded as `browser-test-results` for seven days. Upload is best effort because GitHub artifact storage quotas can prevent it; test failures remain blocking and their logs remain available.
-- **Docker integration**: builds the production image and runs the container/proxy/browser suite against a synthetic Plex server, including actual media decoding, hosted sign-in simulation, and diagnostics disabled/enabled using the same image.
+- **Docker integration**: builds the production image and runs the static-hosting/direct-browser suite against a synthetic Plex server, including actual media decoding, hosted sign-in simulation, and diagnostics disabled/enabled using the same image.
 
 The workflow needs no Plex credentials, private-network access, repository secrets, or image-registry publishing permissions. Actions are pinned to commit SHAs and repository permissions are read-only. New commits cancel older runs for the same branch or pull request. CI rejects focused `test.only` cases and allows 60 seconds per browser test (30 seconds locally); it does not automatically retry failed tests. Local runs also retain traces for failures.
 
@@ -260,7 +277,7 @@ public/sample/    Original local sample illustrations
 
 All UI, source comments, errors, configuration, and documentation are in English. `docs/PRD.md` records the implemented MVP, accepted interaction changes, validation boundaries and future scope. Future work affecting identity, integrations or distribution must consult `docs/COMPLIANCE.md`.
 
-The Docker test suite requires a built `trafirdis:local` image, the `node:22-alpine` fixture image, and the same Playwright Chromium installation used by the browser suite. It creates and removes an isolated Docker network and test containers, uses only synthetic Plex responses/media, and checks runtime configuration, non-root/read-only operation, authentication, redirects, range/stream delivery, browser playback, offline Plex behavior, and credential-free logs. Set `TRAFIRDIS_TEST_IMAGE` to test another image tag. Builds behind a TLS inspection proxy may use the optional BuildKit secret `--secret id=proxy_ca,src=/path/to/trusted-proxy-ca.pem`; that CA is mounted only during dependency installation and is not copied into the image.
+The Docker test suite requires a built `trafirdis:local` image, the `node:22-alpine` fixture image, and the same Playwright Chromium installation used by the browser suite. It creates and removes an isolated Docker network and test containers, uses only synthetic Plex responses/media, and checks runtime diagnostics, non-root/read-only static hosting, direct cross-origin browser playback, hosted sign-in, offline Plex behavior and credential-free application logs. Set `TRAFIRDIS_TEST_IMAGE` to test another image tag. Builds behind a TLS inspection proxy may use the optional BuildKit secret `--secret id=proxy_ca,src=/path/to/trusted-proxy-ca.pem`; that CA is mounted only during dependency installation and is not copied into the image.
 
 ### Verify the preview restart fix
 
@@ -287,3 +304,5 @@ To test on Chrome/Docker, play A, open details, move to B and back to A, or scro
 Changing the active browser tab does not pause, mute, restart or release an active hero/details preview. It keeps its current position, audio choice and open Plex session, and ends normally when the trailer finishes. An explicitly paused preview stays paused. Scrolling the preview out of its viewport still suspends it; settings, disconnect and retained-buffer limits still apply.
 
 This is Trafirdis's application policy, not an override of browser/OS behavior. Tab discard, energy saving, device sleep and browser media policies can still suspend playback. Automated headless tests dispatch visibility events while decoding real synthetic HLS; desktop Chrome tab switching should also be checked manually. Retained inactive buffers still expire after 30 seconds of elapsed time even if a background tab throttles timer callbacks.
+
+On 2026-11-14, the maintainer confirmed that the new server-discovery and direct-connection flow works on their deployment after the authenticated-root and LAN fallback fixes. This confirms that setup; other hosted HTTPS deployments, DNS configurations and browser/provider combinations still need their own checks.

@@ -31,7 +31,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       new AbortController().signal,
       resolved,
       playing,
@@ -57,7 +57,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       controller.signal,
       () => {},
       () => {},
@@ -88,7 +88,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       new AbortController().signal,
       vi.fn(),
       playing,
@@ -115,7 +115,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       new AbortController().signal,
       vi.fn(),
       playing,
@@ -140,7 +140,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       new AbortController().signal,
       vi.fn(),
       playing,
@@ -171,7 +171,7 @@ describe("native video playback", () => {
       video.cancelVideoFrameCallback = vi.fn();
       const hidden = vi.spyOn(document, "hidden", "get");
       const playing = vi.fn();
-      const client = new PlexClient("x");
+      const client = new PlexClient("x", "http://127.0.0.1:32401");
       const controller = new AbortController();
       const result = playAttempt(
         video,
@@ -215,7 +215,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       new AbortController().signal,
       vi.fn(),
       vi.fn(),
@@ -242,7 +242,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       new AbortController().signal,
       vi.fn(),
       playing,
@@ -268,7 +268,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       new AbortController().signal,
       vi.fn(),
       playing,
@@ -295,7 +295,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       new AbortController().signal,
       () => {},
       () => {},
@@ -310,7 +310,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       new AbortController().signal,
       () => {},
       () => {},
@@ -328,7 +328,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       controller.signal,
       () => {},
       () => {},
@@ -347,7 +347,7 @@ describe("native video playback", () => {
     const result = playAttempt(
       video,
       attempt,
-      new PlexClient("x"),
+      new PlexClient("x", "http://127.0.0.1:32401"),
       new AbortController().signal,
       () => {},
       () => {},
@@ -382,7 +382,7 @@ describe("HLS decision lifecycle", () => {
   });
   afterEach(() => vi.useRealTimers());
   function setup() {
-    const client = new PlexClient("x");
+    const client = new PlexClient("x", "http://127.0.0.1:32401");
     const stop = vi.spyOn(client, "stopPreviewSession").mockResolvedValue();
     const video = document.createElement("video");
     const controller = new AbortController();
@@ -477,7 +477,7 @@ describe("suspended playback control", () => {
   });
   afterEach(() => vi.useRealTimers());
   it("preserves the native HLS source while suspended and restarts at zero without another decision", async () => {
-    const client = new PlexClient("x");
+    const client = new PlexClient("x", "http://127.0.0.1:32401");
     const prepare = vi.spyOn(client, "preparePreview").mockResolvedValue();
     const stop = vi.spyOn(client, "stopPreviewSession").mockResolvedValue();
     const video = document.createElement("video");

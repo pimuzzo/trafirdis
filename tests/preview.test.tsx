@@ -52,7 +52,9 @@ describe("automatic preview lifecycle", () => {
     vi.useRealTimers();
   });
   function setup() {
-    const service = new TrailerService(new PlexClient("x"));
+    const service = new TrailerService(
+      new PlexClient("x", "http://127.0.0.1:32401"),
+    );
     const discover = vi.spyOn(service, "discover").mockResolvedValue(discovery);
     vi.spyOn(service, "attempts").mockReturnValue([
       {
@@ -340,7 +342,7 @@ describe("retained playback surface handoff", () => {
     vi.useRealTimers();
   });
   it("can repeatedly hand a retained playback between views without disposing it from an obsolete wait", async () => {
-    const client = new PlexClient("x");
+    const client = new PlexClient("x", "http://127.0.0.1:32401");
     vi.spyOn(client, "details").mockResolvedValue({
       Extras: {
         Metadata: [{ subtype: "trailer", key: "/library/metadata/200" }],

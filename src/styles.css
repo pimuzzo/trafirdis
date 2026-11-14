@@ -1850,3 +1850,23 @@ td {
     min-height: 490px;
   }
 }
+
+.server-choices {
+  display: grid;
+  gap: 0.75rem;
+  margin-block: 1.25rem;
+}
+.server-choice {
+  text-align: left;
+  justify-content: space-between;
+}
+.server-choice > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.server-choice small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}

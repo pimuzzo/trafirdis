@@ -59,7 +59,7 @@ jobs:
       # Chrome includes the media codecs exercised by the HLS playback fixtures.
       - name: Install Chrome and browser dependencies
         run: npx playwright install --with-deps chrome
-      - name: Run browser and proxy tests
+      - name: Run browser tests
         run: npm run test:e2e
       - name: Upload browser failure report and traces
         if: ${{ failure() && !cancelled() }}
