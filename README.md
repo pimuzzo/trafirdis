@@ -6,7 +6,15 @@ A trailer-first discovery experience for Plex. **Trafirdis** means **TRAiler FIR
 
 Trafirdis is an independent, unofficial open-source project and is not affiliated with, endorsed by, or sponsored by Plex.
 
-Plex and Plex Media Server are trademarks of Plex and used under a license. See [compliance guidance](docs/COMPLIANCE.md) for the applicable trademark license, integration policies and unresolved questions, the [privacy notice](public/privacy.html) for application data practices, and [NOTICE](NOTICE) for copyright and attribution. A source-code license has not yet been selected; the open-source identity is project intent rather than a license grant.
+Plex and Plex Media Server are trademarks of Plex and used under a license. See [compliance guidance](docs/COMPLIANCE.md) for the applicable trademark license, integration policies and unresolved questions, the [privacy notice](public/privacy.html) for application data practices, and [NOTICE](NOTICE) for copyright and attribution.
+
+## License
+
+Trafirdis's original code and project-owned assets distributed with this version are licensed under the [MIT License](LICENSE). Dependencies retain their own licenses; [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) includes frontend dependency attribution and license texts. The project license does not grant rights to Plex software, trademarks or users' movies, trailers and artwork, and does not replace Plex's terms of service.
+
+Earlier snapshots without an explicit project license are not automatically relicensed by adding this file. Project code included in this MIT-licensed version is available under MIT even if it was originally written in an earlier commit. No repository history is rewritten or blanket license granted over earlier snapshots by this change.
+
+Production builds include `LICENSE`, `NOTICE` and `THIRD_PARTY_NOTICES` in `dist/`; keep these files when deploying or redistributing the build. Docker includes the same files and retains the base image's separate Nginx and system-component licenses. When updating frontend dependencies, refresh their versions, attribution and license texts in `THIRD_PARTY_NOTICES`.
 
 ## Run locally
 

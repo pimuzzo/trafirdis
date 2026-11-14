@@ -32,6 +32,8 @@ Keep authentication, subscription entitlements and technical restrictions intact
 
 The application links to a bundled [privacy notice](../public/privacy.html) and includes a source copyright notice and [NOTICE](../NOTICE). Sample illustrations and synthetic test media are project assets; users' Plex media are separate.
 
+On 2026-11-14 the maintainer selected the [MIT License](../LICENSE) for original Trafirdis code and project-owned assets distributed with the license. Earlier unlicensed snapshots are not automatically relicensed; code included in this newly licensed snapshot can be used under MIT even if written earlier. No blanket historical grant or history rewrite is included. Dependency attribution and frontend license texts are retained in [THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES), alongside the project license and notice in production builds and Docker. This grant covers project-owned material only; it does not settle Plex integration, trademark or media rights. Confirm rights to future contributions and imported material before licensing them.
+
 ## Project safeguards, not additional Plex policy claims
 
 These are Trafirdis design decisions; do not describe them as mandated by Plex unless a current official policy supports that claim:
@@ -45,7 +47,6 @@ These are Trafirdis design decisions; do not describe them as mandated by Plex u
 
 ## Known limitations and unresolved questions
 
-- No project source-code license has yet been selected. The open-source identity describes the project's intent; public visibility and this notice alone do not grant an open-source distribution license. The maintainer must choose an appropriate license and confirm contributor rights before licensing a release.
 - The broad Terms restrictions on overlapping functionality and exclusive Plex Pass features need case-specific assessment for expanded functionality or commercial distribution. This review does not conclude that every present or future integration is approved.
 - Legacy extras keys, provider resolution and preview-session cleanup have compatibility assumptions documented in `plex-api.md`. An endpoint being undocumented proves neither permission nor prohibition.
 - Provider rights, API access, subscription conditions and policies can change. A successful playback test establishes technical behavior, not permission to redistribute the stream.

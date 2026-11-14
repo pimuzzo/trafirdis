@@ -1,5 +1,8 @@
 Copyright © 2026 Trafirdis contributors.
 
+Trafirdis original code and project-owned assets distributed with LICENSE are
+licensed under the MIT License. See LICENSE for the full grant and disclaimer.
+
 Trafirdis source code and original project artwork are separate from Plex software,
 Plex trademarks and users' media. This notice does not grant rights to third-party
 software, marks, movies, trailers or artwork. Dependency licenses remain applicable.
@@ -8,5 +11,6 @@ Plex owns the marks identifying its platform and server. See the attribution
 in README and the conditional trademark license in Plex's Trademark Guidelines.
 This is not an endorsement or a claim of separate written approval from Plex.
 
-See docs/COMPLIANCE.md for policy references and unresolved licensing questions.
-This notice is not a substitute for a project source-code license.
+See THIRD_PARTY_NOTICES for frontend dependency licenses and attribution, and
+docs/COMPLIANCE.md for policy references, license scope and unresolved questions.
+The Nginx runtime and its packaged components retain their own licenses.
